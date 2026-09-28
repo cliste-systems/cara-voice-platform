@@ -90,7 +90,7 @@ export function hashPersonaSeed(input: string): number {
   return h >>> 0;
 }
 
-export function resolveTimeOfDay(localHour?: number): string {
+function resolveTimeOfDay(localHour?: number): string {
   if (localHour == null || !Number.isFinite(localHour)) return 'afternoon';
   if (localHour < 12) return 'morning';
   if (localHour < 17) return 'afternoon';

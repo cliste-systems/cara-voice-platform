@@ -4,7 +4,7 @@ import { isRetailNiche } from './org_vertical.js';
 
 const PROD_OVERRIDE_TOKEN = 'i-have-a-pre-call-ivr-and-accept-the-legal-risk';
 
-/** Default post-greeting disclosure — matches code-base-1 voiceLegalDisclosure(). */
+/** Default post-greeting disclosure — matches cara-platform voiceLegalDisclosure(). */
 const DEFAULT_BUSINESS_DISCLOSURE = voiceLegalDisclosure();
 
 export type ResolvedAiDisclosure = {

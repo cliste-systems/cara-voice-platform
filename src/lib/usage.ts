@@ -7,7 +7,7 @@ import { getSupabaseClient, isOfflinePlayground } from './supabase.js';
  *   1. `startUsageRecord` at session start — so even calls that crash mid-way
  *      are visible in the dashboard (with `ended_at=null`).
  *   2. `finishUsageRecord` on session close — fills in `ended_at` and
- *      `minutes_billable`, which the nightly cron in cliste-code-base-1 rolls
+ *      `minutes_billable`, which the nightly cron in cara-platform rolls
  *      up into Stripe metered usage records.
  *
  * Both are best-effort: failures are logged but never surface to the caller,
@@ -112,24 +112,11 @@ export function currentBillingPeriodStart(
 }
 
 /**
- * Sum the org's billable minutes inside the current billing period. Used
- * by the agent to decide whether to refuse a new call when the org is
- * already over their plan quota — the metering row alone tracks billing
- * but does NOT cap costs without this gate.
- *
- * Counts BOTH closed records (minutes_billable) AND open ones (estimated from
- * `started_at` → now) so a long in-flight call still counts toward
- * the cap. Returns null on DB error so callers can fail-open if metering
- * is broken (better to let the call through than to drop legitimate
- * traffic if Supabase is having a moment).
- *
- * Open-row estimates are bounded so a single zombie row (worker crash,
- * SIGKILL, deploy mid-call) cannot lock the whole org out of inbound
- * calls. Anything we'd estimate above MAX_OPEN_MINUTES is treated as a
- * zombie and ignored — the real billable minutes are captured by the
- * call_logs / Twilio reconciliation cron.
+ * Complete billing-period total, calculated inside PostgreSQL so the REST row
+ * limit cannot omit usage. The RPC includes estimated active calls, capped at
+ * 30 minutes per row, and ignores unfinished rows older than six hours.
+ * Errors or invalid totals return null so admission fails closed.
  */
-const MAX_OPEN_MINUTES_PER_ROW = 30;
 const ZOMBIE_OPEN_AGE_MS = 6 * 60 * 60 * 1000;
 
 export async function sumUsageMinutesThisPeriod(input: {
@@ -139,44 +126,19 @@ export async function sumUsageMinutesThisPeriod(input: {
   if (isOfflinePlayground()) return 0;
   try {
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('usage_records')
-      .select('minutes_billable, started_at, ended_at')
-      .eq('organization_id', input.organizationId)
-      .eq('billing_period_start', input.billingPeriodStart);
+    const { data, error } = await supabase.rpc('voice_usage_minutes_for_period', {
+      p_organization_id: input.organizationId,
+      p_billing_period_start: input.billingPeriodStart,
+    });
     if (error) {
       console.warn('[usage] sumUsageMinutesThisPeriod failed', error.message);
       return null;
     }
-    let total = 0;
-    const now = Date.now();
-    for (const row of data ?? []) {
-      const billed =
-        typeof (row as { minutes_billable?: number }).minutes_billable === 'number'
-          ? (row as { minutes_billable: number }).minutes_billable
-          : null;
-      if (billed != null) {
-        total += billed;
-        continue;
-      }
-      const startedAt = (row as { started_at?: string | null }).started_at;
-      if (!startedAt) continue;
-      const startedMs = Date.parse(startedAt);
-      if (!Number.isFinite(startedMs)) continue;
-      const ageMs = now - startedMs;
-      if (ageMs > ZOMBIE_OPEN_AGE_MS) {
-        // Almost certainly a worker crash that never wrote ended_at. Don't
-        // let it count against quota; nightly cleanup will close it.
-        console.warn('[usage] ignoring zombie open usage row', {
-          startedAt,
-          ageMinutes: Math.round(ageMs / 60_000),
-        });
-        continue;
-      }
-      const estimated = Math.max(0, Math.round((ageMs / 60_000) * 100) / 100);
-      total += Math.min(estimated, MAX_OPEN_MINUTES_PER_ROW);
+    if (typeof data !== 'number' || !Number.isFinite(data) || data < 0) {
+      console.warn('[usage] sumUsageMinutesThisPeriod returned an invalid total');
+      return null;
     }
-    return total;
+    return data;
   } catch (err) {
     console.warn(
       '[usage] sumUsageMinutesThisPeriod threw',
@@ -233,7 +195,7 @@ export async function reapZombieUsageRows(): Promise<void> {
 }
 
 /**
- * Minutes included per plan tier. Kept in sync with cliste-code-base-1's
+ * Minutes included per plan tier. Kept in sync with cara-platform's
  * `src/lib/cliste-plans.ts`. Returns null for unknown/enterprise tiers so
  * the metering row doesn't claim a false quota.
  */

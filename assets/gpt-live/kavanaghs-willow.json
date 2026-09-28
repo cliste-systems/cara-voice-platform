@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "model": "gpt-live-1",
+  "voice": "willow",
+  "text": "Hello, you're through to Kavanaghs SuperValu Donegal Town. I'm Cara, the AI assistant. This call may be recorded and transcribed. How can I help you today?",
+  "audioFile": "kavanaghs-willow.wav",
+  "sha256": "77ebb1ab092d5ae40b3cd6abd4c69420b6e8845751c3fadf5ebdc5c6bba274cc",
+  "independentTranscript": "Hello, you're through to Kavanagh's SuperValu Donegal Town, I'm Cara the AI assistant. This call may be recorded and transcribed. How can I help you today?",
+  "createdAt": "2026-09-27",
+  "notes": "Generated with GPT-Live 1 Willow. Independent transcription checked both raw and trimmed audio. Only edge silence removed."
+}

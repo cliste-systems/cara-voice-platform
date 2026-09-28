@@ -43,7 +43,7 @@ export function isOfflinePlayground(): boolean {
   return envFlag('CARA_OFFLINE_PLAYGROUND');
 }
 
-export function playgroundOrg(): OrgCallConfig {
+function playgroundOrg(): OrgCallConfig {
   return {
     id: '00000000-0000-4000-8000-000000000001',
     account_id: null,
@@ -94,7 +94,7 @@ export function getSupabaseClient(): SupabaseClient {
   return getSupabase();
 }
 
-/** Full org slice for inbound Cara calls — aligned with code-base-1 compile contract. */
+/** Full org slice for inbound Cara calls — aligned with cara-platform compile contract. */
 export type OrgCallConfig = {
   id: string;
   account_id: string | null;
@@ -327,11 +327,6 @@ async function resolveOrgUncached(input: {
   const phone = input.phone?.trim();
   let org: OrgCallConfig | null = null;
 
-  if (organizationId) {
-    org = await fetchOrgById(organizationId);
-    if (org) return applyActiveHoursOverride(org);
-  }
-
   if (phone) {
     const byPool = await fetchOrgByPhonePool(phone);
     if (byPool) {
@@ -358,9 +353,8 @@ async function resolveOrgUncached(input: {
     }
   }
 
-  if (!org && slug) {
-    org = await fetchOrgBySlug(slug);
-  }
+  if (!org && organizationId) org = await fetchOrgById(organizationId);
+  if (!org && slug) org = await fetchOrgBySlug(slug);
 
   if (!org) return null;
   return applyActiveHoursOverride(org);
@@ -410,14 +404,35 @@ export async function getSendableBusinessFiles(
   });
 }
 
-export async function createBusinessFileSignedUrl(
-  storagePath: string,
-  expiresInSeconds = 3600,
-): Promise<string | null> {
+export function isTenantBusinessFilePath(organizationId: string, path: string): boolean {
+  return Boolean(organizationId && path.startsWith(`${organizationId}/`) &&
+    !path.includes('..') && !path.includes('\\') && !path.includes('//'));
+}
+
+export async function createBusinessFileSignedUrl(input: {
+  organizationId: string;
+  fileId: string;
+  expiresInSeconds?: number;
+}): Promise<string | null> {
   const supabase = getSupabase();
+  // Reload the row at the point of use: cached tool context is not authority.
+  const { data: file, error: fileError } = await supabase
+    .from('business_files')
+    .select('storage_path')
+    .eq('id', input.fileId)
+    .eq('organization_id', input.organizationId)
+    .eq('send_enabled', true)
+    .maybeSingle();
+  if (fileError || !file?.storage_path) return null;
+  const path = String(file.storage_path);
+  // Storage keys are tenant-prefixed. Reject legacy or malformed paths until
+  // they are migrated by a trusted uploader; a row cannot vouch for an object.
+  if (!isTenantBusinessFilePath(input.organizationId, path)) {
+    return null;
+  }
   const { data, error } = await supabase.storage
     .from('business-files')
-    .createSignedUrl(storagePath, expiresInSeconds);
+    .createSignedUrl(path, input.expiresInSeconds ?? 3600);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
 }

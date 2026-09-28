@@ -11,7 +11,7 @@ export type ResolvedTtsConfig = {
 };
 
 /** Cartesia inference voices are UUIDs — ignore stale voice ids from other providers. */
-export function isCartesiaVoiceId(voiceId: string | null | undefined): boolean {
+function isCartesiaVoiceId(voiceId: string | null | undefined): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     voiceId?.trim() ?? '',
   );

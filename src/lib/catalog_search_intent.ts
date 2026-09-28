@@ -2,6 +2,10 @@ import { inferRewardsPricePoint } from './rewards_price_point.js';
 
 export type CatalogSearchIntent = 'offer' | 'price' | 'stock';
 
+// Keep promotion mechanics intact: dropping these words changes which prices qualify.
+const PROMOTION_MECHANIC = /\bmulti[- ]?buys?\b|\bmix\s*(?:and|&)\s*match\b|\bsuper\s*(?:7|seven)(?:['’]?s)?\b|\b(?:\d+|two|three|four|five|six)\s+for\s+(?:€\s*)?(?:\d+(?:[.,]\d+)?|(?:a\s+)?tenner|ten|five|twenty)\b|\bbuy\s+(?:one|two|\d+)\b.*\bget\b|\bhalf[- ]price\b|\b\d+\s*%\s*off\b/i;
+const OFFER_WORDS = /\boffers?\b|\bdeals?\b|\bspecials?\b|\bpromos?\b|\bpromotions?\b|\breduced\b|\bdiscounts?\b|\bprice\s+cuts?\b|\bthis\s+week\b|\bon\s+sale\b|\bis it on\b|\bare they on\b/i;
+
 export function inferCatalogSearchIntent(query: string): CatalogSearchIntent {
   const q = query.toLowerCase();
   if (
@@ -9,13 +13,7 @@ export function inferCatalogSearchIntent(query: string): CatalogSearchIntent {
   ) {
     return 'offer';
   }
-  if (
-    /\bon offer\b|\bthis week\b|\bspecial\b|\bpromo|\bpromotion|\bdeal\b|\breduced\b|\bany offers\b|\bis it on\b|\bare they on\b|\boffers?\s+this\b/i.test(
-      q,
-    )
-  ) {
-    return 'offer';
-  }
+  if (OFFER_WORDS.test(q) || PROMOTION_MECHANIC.test(q)) return 'offer';
   if (
     /\bhow much\b|\bprice\b|\bcost\b|\bwhat'?s the price\b|\bhow much is\b|\bwhat is the price\b/i.test(
       q,
@@ -38,36 +36,33 @@ export function resolveCatalogSearchIntent(input: {
   return undefined;
 }
 
-/** Caller wants a rundown of synced offers, not one specific product. */
+/** Caller wants a department/campaign rundown, rather than a specific product. */
 export function inferWeeklyOffersListIntent(query: string): boolean {
   const trimmed = query.trim();
-  if (!trimmed) return true;
-  if (
-    /\bweekly offers\b|\bwhat offers\b|\bwhat'?s on offer\b|\bwhats on offer\b|\bbest offer|\blist offers\b|\blist (?:five|5|\d+)\b|\bany offers\b|\boffers (?:this week|do you have|you have|on)\b|\bsurprise me\b|\bhighlights\b|\btell me (?:the|your) offers\b|\bapart from meat\b|\bnot meat\b|\bgrocery offers\b|\bwhat (?:meat )?offers\b|\b(?:meat|butcher) offers\b/i.test(
-      trimmed,
-    )
-  ) {
+  if (!trimmed || PROMOTION_MECHANIC.test(trimmed)) return true;
+  if (/\b(?:weekly offers|best offers?|list offers|list (?:five|5|\d+)|surprise me|highlights|apart from meat|not meat|non[- ]meat)\b/i.test(trimmed)) {
     return true;
   }
-  const tokens = trimmed
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((t) => t.length > 1);
-  if (tokens.length === 0 && /\boffer/i.test(trimmed)) return true;
-  if (
-    tokens.length === 1 &&
-    /^(meat|butcher|deli|offers?|promos?|grocery)$/i.test(tokens[0] ?? '')
-  ) {
-    return true;
-  }
-  if (tokens.length >= 2 && inferWeeklyOffersBrowseCategories(trimmed).length >= 2) {
-    return true;
-  }
-  return false;
+  if (inferWeeklyOffersBrowseCategories(trimmed).length >= 2) return true;
+  const tokens = trimmed.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const browseWords = new Set([
+    'what', 'which', 'whats', 's', 'is', 'are', 'there', 'any', 'anything', 'everything',
+    'all', 'current', 'latest', 'weekly', 'this', 'week', 'today', 'now', 'the', 'a', 'an',
+    'in', 'at', 'on', 'from', 'for', 'and', 'or', 'of', 'to', 'do', 'you', 'ye', 'have',
+    'got', 'tell', 'me', 'your', 'please', 'list', 'show', 'across', 'every', 'whole',
+    'offer', 'offers', 'special', 'specials', 'deal', 'deals', 'promo', 'promos',
+    'promotion', 'promotions', 'reduced', 'discount', 'discounts', 'sale',
+    'meat', 'butcher', 'butchers', 'fish', 'seafood', 'deli', 'dairy', 'bakery',
+    'produce', 'fruit', 'veg', 'vegetables', 'grocery', 'groceries', 'ambient',
+    'frozen', 'household', 'baby', 'pet', 'health', 'beauty', 'wine', 'beer',
+    'spirits', 'off', 'licence', 'license', 'counter', 'counters', 'aisle', 'aisles',
+    'section', 'sections', 'department', 'departments', 'shop', 'store', 'national',
+    'pre', 'pack', 'prepack', 'packaged', 'fresh', 'chilled', 'food', 'foods',
+  ]);
+  return tokens.length > 0 && tokens.every((token) => browseWords.has(token));
 }
 
-export function inferWeeklyOffersBrowseCategories(query: string): string[] {
+function inferWeeklyOffersBrowseCategories(query: string): string[] {
   const trimmed = query.trim().toLowerCase();
   const tokens = trimmed
     .replace(/[^a-z0-9\s]/g, ' ')
@@ -114,11 +109,7 @@ export function trackCallerCatalogSearchIntent(
     flags.callerAskedAboutOffers = true;
     return;
   }
-  if (
-    /\b(on offer|this week|any offers?|special|promotion|promo|deal|reduced|is there an offer|are there offers|offer on|weekly offers|what offers|what meat offers|meat offers|list offers|apart from meat|rewards? price|real rewards)\b/i.test(
-      t,
-    )
-  ) {
+  if (inferCatalogSearchIntent(t) === 'offer') {
     flags.callerAskedAboutOffers = true;
     return;
   }

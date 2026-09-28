@@ -1,7 +1,7 @@
-# Security posture — `cliste-code-base-2`
+# Security posture — `cara-voice-platform`
 
 This service is a **LiveKit Cloud Agent worker** (voice agent). It does not expose
-any inbound HTTP endpoints. Public-surface hardening lives in `cliste-code-base-1`
+any inbound HTTP endpoints. Public-surface hardening lives in `cara-platform`
 (`SECURITY_CLOUDFLARE.md`).
 
 ## Threat model
@@ -22,13 +22,13 @@ any inbound HTTP endpoints. Public-surface hardening lives in `cliste-code-base-
 | PII redaction before LLM post-processing and DB insert | `src/lib/gdpr.ts`, `src/lib/call_logs.ts`, `src/lib/action_tickets.ts` | Removes card numbers, CVV, IBANs, PPS numbers, spoken card numbers |
 | Phone number masking in logs | `src/lib/gdpr.ts` (`maskPhone`) applied in `src/lib/tools.ts` | Prevents full numbers landing in log pipelines |
 | AI / recording disclosure at call open | `src/agent.ts`, `src/lib/greeting_compliance.ts`, `src/lib/ai_disclosure.ts` | Spoken disclosure must complete playout before LiveKit egress starts |
-| Call MP3 recording (30-day retention) | `src/lib/call_recording.ts`, `src/agent.ts` | LiveKit egress → Supabase `call-recordings/{orgId}/{callLogId}.mp3` |
+| Call MP3 recording (retention job must be verified) | `src/lib/call_recording.ts`, `src/agent.ts` | LiveKit egress → Supabase `call-recordings/{orgId}/{callLogId}.mp3` |
 | Caller-line classification | `src/lib/phone_classify.ts` | Detects landline vs mobile |
 | Tool-level caller verification for payment links | `src/lib/tools.ts` (`sendPaymentLink`) | Refuses to resend a payment link to a number other than the one on file |
 | Stripe Checkout Sessions (not card capture by voice) | `src/lib/payments.ts` | Card details never touch the agent or our logs |
 | In-process cache for org config | `src/lib/cache.ts`, `src/lib/supabase.ts` | Reduces repeated reads of org + service data |
-| GDPR right-to-erasure script | `scripts/gdpr-erase.ts` | Wipes caller PII, deletes recordings |
-| GDPR storage-limitation | `cliste-code-base-1` cron `/api/cron/data-retention` | Nulls verbatim transcripts after 30 days |
+| GDPR right-to-erasure script | `scripts/gdpr-erase.ts` | Requires `--organization-id`; wipes scoped call, usage, test-report, and transcript-event data and deletes referenced recordings |
+| GDPR storage-limitation | `scripts/gdpr-purge-transcripts.ts`; `cara-platform` cron `/api/cron/data-retention` | Manual script also purges raw transcript events; dashboard cron and provider-held copies require separate verification |
 
 ## LiveKit Cloud Agents checklist
 
@@ -55,5 +55,5 @@ See [`docs/livekit-cloud-deploy.md`](docs/livekit-cloud-deploy.md) for deploy co
 
 ## Related
 
-- `../cliste-code-base-1/SECURITY_CLOUDFLARE.md` — edge hardening for the
+- `../cara-platform/SECURITY_CLOUDFLARE.md` — edge hardening for the
   public-facing Hello Cara dashboard (`https://app.hellocara.ie`).

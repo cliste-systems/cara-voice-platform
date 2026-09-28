@@ -1,12 +1,12 @@
 import { resolveSpokenBusinessName, type SpokenBusinessNameInput } from './spoken_business_name.js';
 
 /** Warm reply to "can you hear me?" — one line so a cut-off still lands the follow-up. */
-export function buildAudioCheckReply(): string {
+function buildAudioCheckReply(): string {
   return "Yeah, I can hear you fine — how are you keeping?";
 }
 
 /** Caller checking the line with hello/hi — always acknowledge, never stay silent. */
-export function buildLineEngagementReply(): string {
+function buildLineEngagementReply(): string {
   return "Hello — I'm here, what can I do for you?";
 }
 
@@ -17,7 +17,7 @@ const DEMO_HOST_OPENERS = [
 ] as const;
 
 /** Warm Irish reply after the greeting's "how are you keeping?" — conversational, not a pitch. */
-export function buildDemoHostOpenerReply(seed = ''): string {
+function buildDemoHostOpenerReply(seed = ''): string {
   const idx = pickIndex(seed.trim() || String(Date.now()), DEMO_HOST_OPENERS.length);
   return DEMO_HOST_OPENERS[idx]!;
 }
@@ -30,7 +30,7 @@ const SOCIAL_CHITCHAT_REPLIES = [
 ] as const;
 
 /** Warm Irish reply to "how are you keeping?" — no call-centre assist phrasing. */
-export function buildSocialChitchatReply(seed = ''): string {
+function buildSocialChitchatReply(seed = ''): string {
   const idx = pickIndex(seed.trim() || String(Date.now()), SOCIAL_CHITCHAT_REPLIES.length);
   return SOCIAL_CHITCHAT_REPLIES[idx]!;
 }
@@ -177,7 +177,7 @@ export function buildDemoCallClosingLine(
 export { demoOutroTimePhrase };
 
 /** Demo wrap-beat question counts as wind-down for close flow. */
-export function assistantAskedDemoWrap(text: string): boolean {
+function assistantAskedDemoWrap(text: string): boolean {
   const t = text.trim();
   if (!t || !/\?/.test(t)) return false;
   return /\b(another (trade|example)|are you sorted|happy enough|sorted for now)\b/i.test(t);

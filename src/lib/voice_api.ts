@@ -11,7 +11,7 @@ const CALL_COMPLETE_TIMEOUT_MS = Number.parseInt(
 );
 
 /** Cap transcript size before POST to dashboard webhook. */
-export const MAX_WEBHOOK_TRANSCRIPT_CHARS = 100_000;
+const MAX_WEBHOOK_TRANSCRIPT_CHARS = 100_000;
 
 import type { CallCloseDiagnosticsPayload } from './call_close_diagnostics.js';
 
@@ -246,6 +246,8 @@ export async function postSendSms(
 
 export type SendCallerEmailPayload = {
   called_number: string;
+  /** Server-created LiveKit room identifying the call for delivery limits. */
+  call_session_id: string;
   to: string;
   subject: string;
   body: string;
@@ -349,7 +351,7 @@ export type SearchWeeklyOffersMatch = {
   quote_text: string;
 };
 
-export async function postSearchWeeklyOffers(
+async function postSearchWeeklyOffers(
   payload: SearchWeeklyOffersPayload,
 ): Promise<{ ok: boolean; matches: SearchWeeklyOffersMatch[]; clarificationHint?: string | null; error?: string }> {
   if (!voiceWebhooksConfigured()) {

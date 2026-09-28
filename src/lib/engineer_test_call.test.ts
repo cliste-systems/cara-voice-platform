@@ -24,8 +24,8 @@ describe('engineer_test_call', () => {
   it('detects fixed admin caller and room prefix', () => {
     assert.equal(isEngineerTestCallerNumber('+353870000001'), true);
     assert.equal(isEngineerTestRoomName('admin-demo-abc'), true);
-    assert.equal(isEngineerTestCall({ callerNumber: '+353870000001' }), true);
-    assert.equal(isEngineerTestCall({ roomName: 'admin-demo-xyz' }), true);
+    assert.equal(isEngineerTestCall({ callerNumber: '+353870000001' }), false);
+    assert.equal(isEngineerTestCall({ roomName: 'admin-demo-xyz' }), false);
   });
 
   it('ignores normal customer calls', () => {

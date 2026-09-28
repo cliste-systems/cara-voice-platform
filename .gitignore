@@ -5,7 +5,11 @@ secrets.production.env
 .livekit-migration.env
 *.log
 .DS_Store
-call-transcripts/*.md
+call-transcripts/*
 !call-transcripts/README.md
 outputs/
 spikes/
+
+/.tmp/
+
+/supabase/.temp/

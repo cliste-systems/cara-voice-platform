@@ -7,7 +7,7 @@
  *   - the `outcome` + `cost_estimate` + `caller_number` (for invoicing /
  *     billing reconciliation under Art 6(1)(f) legitimate interest).
  *
- * Run via dashboard cron `/api/cron/data-retention` in code-base-1 (daily).
+ * Run via dashboard cron `/api/cron/data-retention` in cara-platform (daily).
  * This script remains for manual one-off purges:
  */
 import 'dotenv/config';
@@ -58,20 +58,38 @@ async function main() {
   const count = matches?.length ?? 0;
   console.log(`Rows with non-null transcripts older than cutoff: ${count}`);
 
-  if (count === 0 || dryRun) {
-    return;
+  const { count: captureCount, error: captureCountError } = await supabase
+    .from('call_transcript_captures')
+    .select('id', { count: 'exact', head: true })
+    .lt('started_at', cutoff.toISOString());
+  if (captureCountError) throw captureCountError;
+  console.log(`Raw transcript captures older than cutoff: ${captureCount ?? 0}`);
+  if (dryRun) return;
+
+  if (count > 0) {
+    const { error } = await supabase
+      .from('call_logs')
+      .update({ transcript: null, transcript_review: null })
+      .lt('created_at', cutoff.toISOString())
+      .not('transcript', 'is', null);
+    if (error) throw error;
+    console.log(`Purged ${count} transcript(s).`);
   }
 
-  const { error } = await supabase
-    .from('call_logs')
-    .update({ transcript: null, transcript_review: null })
-    .lt('created_at', cutoff.toISOString())
-    .not('transcript', 'is', null);
-  if (error) {
-    console.error('purge failed', error);
-    process.exit(1);
+  let capturesRemoved = 0;
+  while (true) {
+    const batch = await supabase.from('call_transcript_captures')
+      .select('id').lt('started_at', cutoff.toISOString()).limit(500);
+    if (batch.error) throw batch.error;
+    const ids = (batch.data ?? []).map((row) => row.id);
+    if (!ids.length) break;
+    const events = await supabase.from('call_transcript_events').delete().in('capture_id', ids);
+    if (events.error) throw events.error;
+    const captures = await supabase.from('call_transcript_captures').delete().in('id', ids);
+    if (captures.error) throw captures.error;
+    capturesRemoved += ids.length;
   }
-  console.log(`Purged ${count} transcript(s).`);
+  console.log(`Purged ${capturesRemoved} raw transcript capture(s).`);
 }
 
 void main();

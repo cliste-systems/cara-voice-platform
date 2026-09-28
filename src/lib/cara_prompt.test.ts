@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildCaraCallPrompt } from './cara_prompt.js';
+import { buildCaraCallPrompt, buildGptLiveRetailCallPrompt } from './cara_prompt.js';
 import { pickCallPersona } from './persona.js';
 
 const baseInput = {
@@ -293,5 +293,60 @@ describe('buildCaraCallPrompt', () => {
     assert.match(prompt, /## Your manner on this call/i);
     assert.match(prompt, /endPhoneCall/i);
     assert.ok(prompt.includes(persona.manner));
+  });
+});
+
+describe('buildGptLiveRetailCallPrompt', () => {
+  it('waits for the caller after a checked greeting and keeps cake requests unconfirmed', () => {
+    const prompt = buildGptLiveRetailCallPrompt({
+      ...baseInput,
+      openingLine: 'Hello, this is Cara.',
+      verifiedOpeningPlayed: true,
+    });
+    assert.match(prompt, /already played this checked greeting/);
+    assert.match(prompt, /Wait silently for the caller/);
+    assert.doesNotMatch(prompt, /Your very first words on the call are exactly/);
+    assert.match(prompt, /inscription name and collector's name separately/);
+    assert.match(prompt, /never use one answer for both/);
+    assert.match(prompt, /Do not say an order is accepted, booked or ready/);
+    assert.match(prompt, /unless a tool confirms it/);
+    assert.match(prompt, /Do not invent personal experiences/);
+  });
+
+  it('requests Donegal pronunciation from the opening without substituting slang for accent', () => {
+    const prompt = buildGptLiveRetailCallPrompt({
+      ...baseInput,
+      openingLine:
+        "Hello, you're through to Kavanaghs SuperValu Donegal Town. I'm Cara, the AI assistant.",
+    });
+
+    assert.match(prompt, /native Donegal Irish English accent throughout, from the first word/);
+    assert.match(prompt, /Irish vowel sounds, speech rhythm and intonation pronounced and natural/);
+    assert.match(prompt, /accent through pronunciation while using plain English/);
+    assert.match(prompt, /do not add "grand", "sound", or other slang/);
+    assert.doesNotMatch(prompt, /normal voice|sound by default|put-on accent/);
+    assert.doesNotMatch(prompt, /How you sound/);
+    assert.match(prompt, /word for word/);
+    assert.doesNotMatch(prompt, /Banned slop|Never say \(AI slop\)|CALL FLOW/);
+    assert.ok(prompt.length < 7500);
+    assert.match(prompt, /missing detail would materially change/);
+    assert.match(prompt, /Tool outputs are evidence and internal guidance, not a script/);
+  });
+});
+
+
+describe('offer browsing instructions', () => {
+  it('clarifies ambiguous scope while retaining department and campaign searches', () => {
+    const prompt = buildCaraCallPrompt({ ...baseInput, conversationalRetailMode: true, niche: 'retail' });
+    assert.match(prompt, /weekly offers/);
+    assert.match(prompt, /meat offers/);
+    assert.match(prompt, /Super 7/);
+    assert.match(prompt, /multibuys/);
+    assert.match(prompt, /3 for 10/);
+    assert.match(prompt, /Which department were you thinking of/);
+    assert.match(prompt, /For EVERY broad department/);
+    assert.doesNotMatch(prompt, /search both counter and pre-pack immediately/);
+    assert.match(prompt, /national catalogue match does not by itself confirm local stock/i);
+    assert.doesNotMatch(prompt, /never generic "weekly offers"/);
   });
 });

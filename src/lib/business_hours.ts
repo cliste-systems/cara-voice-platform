@@ -207,7 +207,7 @@ export function weekdayKeyFromDate(d: Date, timeZone: string): (typeof WEEK_ORDE
   return DAY_ALIASES[wd] ?? null;
 }
 
-export function minutesSinceMidnightInTimezone(d: Date, timeZone: string): number {
+function minutesSinceMidnightInTimezone(d: Date, timeZone: string): number {
   const s = d.toLocaleTimeString('en-GB', {
     timeZone,
     hour: '2-digit',

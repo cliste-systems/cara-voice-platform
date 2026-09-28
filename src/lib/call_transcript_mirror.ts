@@ -21,11 +21,11 @@ export type CallTranscriptMirrorOptions = {
 
 function buildPartialBanner(reasons: string[]): string {
   const bullets = reasons.map((r) => `- ${r}`).join('\n');
-  return `> ⚠️ **Partial transcript** — not safe for QA. Waiting for Supabase \`call_logs\` with real Caller lines.
+  return `> ⚠️ **Partial transcript** — not safe for QA. One or more conversation sources are missing.
 >
 > ${bullets.replace(/\n/g, '\n> ')}
 >
-> Re-run \`npm run export:latest-call -- --wait\` after the call is persisted.
+> Re-run \`npm run export:latest-call -- --wait\` after the call is persisted; check the raw transcript journal if it remains partial.
 `;
 }
 

@@ -5,7 +5,7 @@ import {
   EgressStatus,
   S3Upload,
 } from 'livekit-server-sdk';
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 import { getSupabaseClient, isOfflinePlayground } from './supabase.js';
 import { updateCallLogAudioPath } from './call_logs.js';
@@ -132,7 +132,7 @@ export function resolveEgressS3Config(): EgressS3Config | null {
   return { accessKey, secret, bucket, region, endpoint };
 }
 
-export function resolveEgressS3Upload(): S3Upload | null {
+function resolveEgressS3Upload(): S3Upload | null {
   const config = resolveEgressS3Config();
   if (!config) return null;
 
@@ -275,17 +275,54 @@ export async function startCallRecording(input: {
 }
 
 async function downloadRecordingFile(url: string): Promise<Buffer | null> {
+  const config = resolveEgressS3Config();
+  if (!config) return null;
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn('[call_recording] download failed', res.status, url);
+    const source = new URL(url);
+    const allowed = new URL(config.endpoint);
+    if (source.protocol !== 'https:' || source.host !== allowed.host ||
+        source.username || source.password) return null;
+    const res = await fetch(source, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok || !res.body) {
+      console.warn('[call_recording] download failed', res.status);
       return null;
     }
-    return Buffer.from(await res.arrayBuffer());
+    const maxBytes = 100 * 1024 * 1024;
+    if (Number(res.headers.get('content-length') ?? 0) > maxBytes) return null;
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of res.body) {
+      total += chunk.byteLength;
+      if (total > maxBytes) {
+        return null;
+      }
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks, total);
   } catch (error) {
-    console.warn('[call_recording] download error', error);
+    console.warn('[call_recording] download error', error instanceof Error ? error.name : 'unknown');
     return null;
   }
+}
+
+async function deleteEgressS3Object(objectKey: string): Promise<boolean> {
+  const config = resolveEgressS3Config();
+  const client = getEgressS3Client();
+  if (!config || !client) return false;
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: objectKey }));
+    return true;
+  } catch (error) {
+    console.warn('[call_recording] staging cleanup failed', { error: error instanceof Error ? error.name : 'unknown' });
+    return false;
+  }
+}
+
+export async function eraseCallRecordingStaging(organizationId: string, roomName: string): Promise<boolean> {
+  return deleteEgressS3Object(callRecordingStagingPath(organizationId, roomName));
 }
 
 async function downloadFromEgressS3(objectKey: string): Promise<Buffer | null> {
@@ -387,7 +424,7 @@ export async function stopActiveCallRecording(
 }
 
 /** Stop LiveKit egress as soon as the call ends so the MP3 does not include post-call silence. */
-export async function stopCallRecording(egressId: string): Promise<void> {
+async function stopCallRecording(egressId: string): Promise<void> {
   if (isOfflinePlayground() || !callRecordingEnabled()) return;
 
   const id = egressId.trim();
@@ -495,11 +532,16 @@ export async function finalizeCallRecording(input: {
           return null;
         }
 
-        return storeRecordingBody(callLogId, storagePath, body, {
+        const stored = await storeRecordingBody(callLogId, storagePath, body, {
           organizationId,
           callLogId,
           roomName,
         });
+        if (stored) {
+          await deleteEgressS3Object(objectKey);
+          if (objectKey !== stagingPath) await deleteEgressS3Object(stagingPath);
+        }
+        return stored;
       }
 
       await sleep(2000);

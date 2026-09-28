@@ -62,3 +62,31 @@ describe('catalog search intent', () => {
     assert.equal(inferWeeklyOffersListIntent('steak'), false);
   });
 });
+
+
+describe('promotion and department requests', () => {
+  it('recognizes every supported offer mechanic without relying on prior turns', () => {
+    for (const query of [
+      'meat offers', 'dairy deals', 'bakery specials', 'household promotions',
+      'multibuys', 'multi-buy meat', 'mix and match', "Super 7's", 'Super Sevens',
+      '3 for 10', 'three for a tenner', '2 for €5', 'buy one get one free',
+      'half price frozen food', '25% off', 'price cuts',
+    ]) {
+      assert.equal(inferCatalogSearchIntent(query), 'offer', query);
+      const flags: { callerAskedAboutOffers?: boolean } = {};
+      trackCallerCatalogSearchIntent(query, flags);
+      assert.equal(flags.callerAskedAboutOffers, true, query);
+    }
+  });
+
+  it('preserves browse and campaign filters without treating a named product as a rundown', () => {
+    for (const query of [
+      'any meat offers', 'any meat offers in the meat counter this week',
+      'weekly offers', 'dairy offers', 'pet food offers', 'frozen offers',
+      'offers across every department', 'Super 7', '3 for 10 chicken', 'multibuys',
+    ]) assert.equal(inferWeeklyOffersListIntent(query), true, query);
+    for (const query of ['any offers on filled steak', 'offers on chicken fillets', 'Kelloggs on offer']) {
+      assert.equal(inferWeeklyOffersListIntent(query), false, query);
+    }
+  });
+});

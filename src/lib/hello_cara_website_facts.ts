@@ -26,7 +26,7 @@ export const HELLO_CARA_WHAT_WE_DO_EXAMPLES = [
   "Basically I pick up when you can't, chat naturally in an Irish accent, and pass the caller's need back to you.",
 ] as const;
 
-export const HELLO_CARA_WHO_MADE_EXAMPLES = [
+const HELLO_CARA_WHO_MADE_EXAMPLES = [
   "Cliste Systems Limited in Donegal built me — Irish voice engineers.",
   "I'm from the Cliste team out in Donegal — Cliste Systems Limited.",
 ] as const;

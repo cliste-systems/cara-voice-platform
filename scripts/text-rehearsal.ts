@@ -179,10 +179,11 @@ class TextRehearsalClient {
       if (topic !== TEXT_REHEARSAL_TOPIC) return;
       const packet = parseTextRehearsalPacket(payload);
       if (!packet) return;
+      if (packet.type === 'caller_turn' || packet.type === 'ping' || packet.type === 'end_session') return;
       this.handleOutboundPacket(packet);
     });
 
-    await this.room.connect(this.url, this.token, { autoSubscribe: false });
+    await this.room.connect(this.url, this.token, { autoSubscribe: false, dynacast: false });
   }
 
   private handleOutboundPacket(packet: TextRehearsalOutboundPacket): void {
@@ -192,6 +193,7 @@ class TextRehearsalClient {
       return;
     }
     if (packet.type === 'pong') return;
+    if (!('turnId' in packet) || !packet.turnId) return;
 
     const pending = this.pendingTurns.get(packet.turnId);
     if (!pending) return;
@@ -390,7 +392,7 @@ async function runScenario(
   const failures = evaluateTextRehearsalExpectations({
     assistantLines,
     toolCalls,
-    expect: scenario.expect,
+    ...(scenario.expect ? { expect: scenario.expect } : {}),
   });
   return {
     name: scenario.name,

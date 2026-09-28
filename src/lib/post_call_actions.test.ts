@@ -86,7 +86,10 @@ Caller: Yeah, perfect.`;
 
     const actions = fallbackExtractPostCallActions(transcript);
     assert.equal(actions.length, 1);
-    assert.match(actions[0]?.summary ?? '', /Size: 8-inch/i);
+    assert.equal(actions[0]?.type, 'action_ticket');
+    if (actions[0]?.type === 'action_ticket') {
+      assert.match(actions[0].summary, /Size: 8-inch/i);
+    }
   });
 
   it('keeps cake name and collecting name separate when both were given', () => {

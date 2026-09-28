@@ -34,7 +34,7 @@ const TENS = [
   'ninety',
 ] as const;
 
-export function formatSpokenInteger(value: number): string {
+function formatSpokenInteger(value: number): string {
   const n = Math.round(value);
   if (!Number.isFinite(n) || n < 0) return String(value);
   if (n < 20) return ONES[n] ?? String(n);
@@ -52,7 +52,7 @@ export function formatSpokenInteger(value: number): string {
   return String(n);
 }
 
-export function formatSpokenEurAmount(amountEur: number): string {
+function formatSpokenEurAmount(amountEur: number): string {
   const normalized = Math.round(amountEur * 100) / 100;
   const euros = Math.floor(normalized);
   const cents = Math.round((normalized - euros) * 100);

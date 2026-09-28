@@ -2,7 +2,7 @@ import { AudioByteStream } from '@livekit/agents';
 import { AudioFrame } from '@livekit/rtc-node';
 
 /** Brief dual-tone handset hangup — 24 kHz mono PCM (PSTN-ish). */
-export function buildPhoneHangupTonePcm(sampleRate = 24_000): Uint8Array {
+function buildPhoneHangupTonePcm(sampleRate = 24_000): Uint8Array {
   const durationSec = 0.28;
   const sampleCount = Math.floor(sampleRate * durationSec);
   const pcm = new Int16Array(sampleCount);

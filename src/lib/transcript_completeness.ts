@@ -1,5 +1,5 @@
 /** Placeholder text that must never appear in a persisted verbatim export. */
-export const TRANSCRIPT_PARTIAL_MARKERS: readonly RegExp[] = [
+const TRANSCRIPT_PARTIAL_MARKERS: readonly RegExp[] = [
   /\(inferred\)/i,
   /STT not in agent logs/i,
   /Reconstructed from agent logs/i,
@@ -36,6 +36,10 @@ export function assessTranscriptCompleteness(
   }
   if (text && assistantLineCount === 0) {
     reasons.push('no Assistant: lines');
+  }
+
+  if (callerLineCount > 1 && assistantLineCount <= 1) {
+    reasons.push('multiple caller turns but assistant replies are missing (greeting-only capture)');
   }
 
   return {

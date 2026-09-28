@@ -29,8 +29,7 @@ export function isEngineerTestCall(input: {
   roomMetadata?: string | null;
 }): boolean {
   if (parseMetadataAdminSimulator(input.jobMetadata)) return true;
-  if (parseMetadataAdminSimulator(input.roomMetadata)) return true;
-  if (isEngineerTestCallerNumber(input.callerNumber)) return true;
-  if (isEngineerTestRoomName(input.roomName)) return true;
+  // Job metadata is set by the server-side dispatcher. Caller ID, room names,
+  // and mutable room metadata are not billing-authority evidence.
   return false;
 }

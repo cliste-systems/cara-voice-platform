@@ -1,6 +1,6 @@
 /** Regex detectors for spoken assistant text — drive auto-SMS, close flow, hangup. */
 
-export { assistantAskedAnythingElse, assistantAskedWindDown } from './natural_phrasing.js';
+export { assistantAskedAnythingElse } from './natural_phrasing.js';
 
 /** Assistant implied SMS/link was delivered — must match linkSent flag in code. */
 export function assistantClaimsLinkWasSent(text: string): boolean {
@@ -199,7 +199,7 @@ export function callerSoundsLikeAffirmativeConsent(text: string): boolean {
 }
 
 /** Caller declined recording/transcription on the demo line. */
-export function callerSoundsLikeRecordingDecline(text: string): boolean {
+function callerSoundsLikeRecordingDecline(text: string): boolean {
   const t = text
     .trim()
     .toLowerCase()

@@ -46,6 +46,16 @@ CI: [`.github/workflows/deploy-livekit-agent.yml`](../.github/workflows/deploy-l
 
 Keep `LIVEKIT_AGENT_NAME=cliste-voice-local` in `.env` so local workers do not steal production dispatches (`cliste-retail-node`).
 
+## GPT-Live audio settings deployed 27 September 2026
+
+`CARA_GPT_LIVE_PREBUFFER_MS=200` enables the tested startup cushion and silence-only replenishment. `CARA_GPT_LIVE_OPENING_MANIFEST=assets/gpt-live/kavanaghs-willow.json` plays the independently checked Willow greeting before starting the live conversation. The runtime image includes the asset. This manifest is specific to the exact Kavanaghs greeting and Willow voice; a mismatch stops startup and requires a newly checked asset. Text rehearsal bypasses this audio-only opening.
+
+These settings and `CARA_GPT_LIVE_VOICE=willow` were deployed to version `c95ezBW323HT` at 19:43:24 UTC. The version is available and running; runtime logs confirm worker registration as `cliste-retail-node`. The existing SIP dispatch still routes the trunk containing `+353749759508` to that agent. Deployment updated only these three settings; existing credentials and agent-name settings were retained. Keep `CARA_GPT_LIVE_AUDIO_CAPTURE_DIR` unset in production; it is an explicit local debugging option. See [the long-call review](long-call-review-2026-09-27.md) for evidence and remaining limitations.
+
+Previous image version: `vCB8RKVgUzWF`. If rolling back to code without the verified-opening feature, review the associated setting overrides as well. With CLI v2.16.0, pass each override as a separate `--secrets KEY=VALUE` flag; do not comma-separate them. Do not deploy the local `.env`, which selects `cliste-voice-local` and a localhost webhook.
+
+Post-deployment check: an isolated engineer WebRTC call through `cliste-retail-node` played the correct checked greeting and answered a synthetic caller. Independent transcription of received audio confirmed both. The test room was deleted. Actual PSTN listening remains to be tested.
+
 ## Twilio SIP
 
 Production uses Twilio Elastic SIP Trunk origination → `sip:4isoiid8ii2.eu.sip.livekit.cloud`.

@@ -105,7 +105,7 @@ export function createCallDiagnosticSession(): CallDiagnosticSession {
   };
 }
 
-export function readDiagnosticContextFile(): string | undefined {
+function readDiagnosticContextFile(): string | undefined {
   const explicit = process.env.CARA_DIAGNOSTIC_CONTEXT_PATH?.trim();
   const candidates = [
     explicit,
@@ -397,7 +397,7 @@ function formatEventLine(ev: CallDiagnosticEvent, callStartMs?: number): string 
   return `${offset} [${ev.level}] ${ev.tag}${data}`;
 }
 
-export function buildSupabaseRowDeepLink(
+function buildSupabaseRowDeepLink(
   callLogId: string | null | undefined,
   supabaseUrl?: string | null,
 ): string | undefined {

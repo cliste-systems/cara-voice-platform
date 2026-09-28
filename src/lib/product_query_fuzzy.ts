@@ -1,3 +1,5 @@
+import { inferWeeklyOffersListIntent } from './catalog_search_intent.js';
+
 export type RetailProductFulfilment = 'counter' | 'prepack';
 export type RetailProductServiceArea = 'butcher' | 'deli' | 'fish' | 'produce' | 'bakery' | 'dairy' | 'off_licence' | 'grocery';
 
@@ -87,31 +89,31 @@ export function inferExplicitProductServiceArea(
   const nonAlcoholFood =
     /wine\s+gums?|beer[-\s]+battered|cider\s+vinegar|wine\s+vinegar/.test(q);
 
-  if (!nonAlcoholFood && /\boff[-\s]?licen[cs]e\b|\bwine\s+(?:aisle|section|offers?|deals?|specials?)\b|\bwines?\s+(?:on\s+offer|offers?|deals?|specials?)\b|\bguinness\b|\bspirits?\b/.test(q)) {
-    return 'off_licence';
+  const areas = new Set<RetailProductServiceArea>();
+  const departmentBrowse = inferWeeklyOffersListIntent(q);
+  if (/\b(?:apart from|except|excluding|not|non[- ])\s*(?:meat|butcher|dairy|fish|deli|produce|bakery)\b/.test(q)) return undefined;
+  if (!nonAlcoholFood && (/\balcohol\s+(?:department|section|offers?|deals?)\b|^alcohol$|\boff[-\s]?licen[cs]e\b|\b(?:wines?|beer)\s+(?:aisle|section|offers?|deals?|specials?)\b|\b(?:wines?|beer)\s+on\s+offer\b|\bguinness\b|\bspirits?\b/.test(q) || (departmentBrowse && /\b(?:wines?|beer)\b/.test(q)))) {
+    areas.add('off_licence');
   }
-  if (/\bdairy\s+(?:wall|section)\b|\bfresh\s+milk\s+(?:wall|section)\b/.test(q)) {
-    return 'dairy';
+  if ((departmentBrowse && /\bdairy\b/.test(q)) || /\bdairy\s+(?:wall|section|offers?|deals?|specials?|department)\b|^dairy$|\bfresh\s+milk\s+(?:wall|section)\b/.test(q)) {
+    areas.add('dairy');
   }
-  if (/\bfruit\s*(?:&|and)\s*veg\b|\bproduce\s+(?:section|offers?|deals?|specials?)\b|\bveg\s+section\b/.test(q)) {
-    return 'produce';
+  if ((departmentBrowse && /\b(?:fruit|veg|vegetables)\b/.test(q)) || /\bfruit\s*(?:&|and)\s*veg(?:etables)?\b|\bproduce\b|\b(?:fruit|veg|vegetables)\s+(?:section|offers?|deals?|specials?|department)\b/.test(q)) {
+    areas.add('produce');
   }
-  if (/\bfish\s+counter\b|\bfresh\s+fish\s+counter\b|\bseafood\s+counter\b|\bfishmonger\b|\b(?:salmon|cod|prawns?)\b.*\bcounter\b/.test(q)) {
-    return 'fish';
+  if ((departmentBrowse && /\b(?:fish|seafood)\b/.test(q)) || /\b(?:fish|seafood)\s+(?:counter|section|offers?|deals?|specials?|department)\b|\bfishmonger\b|\b(?:salmon|cod|prawns?)\b.*\bcounter\b/.test(q)) {
+    areas.add('fish');
   }
-  if (/\bdeli\s+(?:counter|section)\b/.test(q)) {
-    return 'deli';
+  if (/\bdeli\b/.test(q)) areas.add('deli');
+  if ((departmentBrowse && /\bmeat\b/.test(q)) || /\bbutcher(?:s|'s)?\b|\bmeat\s+(?:counter|section|offers?|deals?|specials?|department)\b|^meat$|\b(?:sirloin|steak|beef|pork|lamb)\b.*\bcounter\b/.test(q)) {
+    areas.add('butcher');
   }
-  if (/\bbutcher(?:s|'s)?\b|\bmeat\s+counter\b|\bfresh\s+meat\s+counter\b|\b(?:sirloin|steak|beef|pork|lamb)\b.*\bcounter\b/.test(q)) {
-    return 'butcher';
+  if (/\bbakery\b/.test(q)) areas.add('bakery');
+  if ((departmentBrowse && /\b(?:ambient|grocery|groceries)\b/.test(q)) || /\b(?:ambient|provisions|grocery)\s+(?:aisle|section|offers?|deals?|specials?|department)\b/.test(q)) {
+    areas.add('grocery');
   }
-  if (/\bbakery\s+(?:counter|section|offers?|deals?|specials?)\b/.test(q)) {
-    return 'bakery';
-  }
-  if (/\b(?:ambient|provisions|grocery)\s+(?:aisle|section|offers?|deals?|specials?)\b/.test(q)) {
-    return 'grocery';
-  }
-  return undefined;
+  // A multi-department request must retain every department in query, not hard-scope the first.
+  return areas.size === 1 ? [...areas][0] : undefined;
 }
 
 export function buildProductFallbackQueries(query: string): string[] {

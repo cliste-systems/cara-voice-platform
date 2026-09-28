@@ -1,7 +1,7 @@
 {
-  "name": "cliste-code-base-2",
+  "name": "cara-voice-platform",
   "version": "1.0.0",
-  "description": "LiveKit Cara voice worker — routing links, webhooks, Cartesia TTS via LiveKit Inference",
+  "description": "LiveKit Cara voice worker \u2014 routing links, webhooks, Cartesia TTS via LiveKit Inference",
   "engines": {
     "node": ">=20"
   },
@@ -22,13 +22,14 @@
     "gdpr:erase": "tsx scripts/gdpr-erase.ts",
     "gdpr:purge-transcripts": "tsx scripts/gdpr-purge-transcripts.ts",
     "download-files": "node dist/src/agent.js download-files",
-    "download-files:dev": "tsx src/agent.ts download-files || echo '[download-files] failed — agent will fall back to VAD for turn detection'",
+    "download-files:dev": "tsx src/agent.ts download-files || echo '[download-files] failed \u2014 agent will fall back to VAD for turn detection'",
     "preview:persona": "tsx scripts/preview-persona.ts",
     "text-rehearsal": "tsx scripts/text-rehearsal.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/lib/*.test.ts",
     "test:demo-golden": "tsx --test src/lib/demo_conversational.test.ts src/lib/demo_personality.test.ts",
-    "knip": "knip"
+    "knip": "knip",
+    "export:call-review": "tsx scripts/export-call-review.ts"
   },
   "keywords": [],
   "author": "",
@@ -41,18 +42,25 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
-    "@livekit/agents": "^1.9.0",
-    "@livekit/agents-plugin-livekit": "^1.9.0",
-    "@livekit/agents-plugin-openai": "^1.9.0",
-    "@livekit/agents-plugin-silero": "^1.9.0",
-    "@livekit/rtc-node": "^0.13.34",
+    "@livekit/agents": "1.9.0",
+    "@livekit/agents-plugin-livekit": "1.9.0",
+    "@livekit/agents-plugin-openai": "1.9.0",
+    "@livekit/agents-plugin-silero": "1.9.0",
+    "@livekit/rtc-node": "0.13.35",
     "@supabase/supabase-js": "^2.101.1",
     "dotenv": "^17.3.1",
     "livekit-server-sdk": "^2.15.0",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.15",
     "twilio": "^6.0.2",
     "ws": "^8.21.0",
     "yaml": "^2.9.0",
     "zod": "^4.3.6"
+  },
+  "overrides": {
+    "adm-zip": "0.6.1",
+    "brace-expansion": "5.0.9",
+    "protobufjs": "7.6.5",
+    "qs": "6.16.0",
+    "sharp": "0.35.5"
   }
 }

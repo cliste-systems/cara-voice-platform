@@ -1,7 +1,7 @@
 import { DEMO_BANNED_AI_SLOP } from './demo_personality.js';
 
 /** First names where STT often confuses spelling — confirm before icing. */
-export const PHONETICALLY_AMBIGUOUS_FIRST_NAMES: readonly (readonly string[])[] = [
+const PHONETICALLY_AMBIGUOUS_FIRST_NAMES: readonly (readonly string[])[] = [
   ['brendan', 'brandon'],
   ['sean', 'shaun', 'shawn'],
   ['cathal', 'cahal'],
@@ -12,7 +12,7 @@ export const PHONETICALLY_AMBIGUOUS_FIRST_NAMES: readonly (readonly string[])[] 
   ['darren', 'darragh', 'dara'],
 ];
 
-export function normalizeFirstNameKey(name: string): string {
+function normalizeFirstNameKey(name: string): string {
   return name
     .trim()
     .toLowerCase()
@@ -80,7 +80,7 @@ export function lastAssistantAskedCallerFirstName(text: string): boolean {
 }
 
 /** @deprecated Use lastAssistantAskedCallerFirstName */
-export const lastAssistantAskedCakeOrCollectionName = lastAssistantAskedCallerFirstName;
+const lastAssistantAskedCakeOrCollectionName = lastAssistantAskedCallerFirstName;
 
 export function assistantAskedExplicitOrderConfirm(text: string): boolean {
   return /\b(is that (all )?correct|does that sound (right|ok|okay)|is that right|have i got that right|is that everything for you)\b/i.test(
@@ -109,10 +109,10 @@ export function assistantPrematureTeamHandoff(text: string): boolean {
 }
 
 /** @deprecated Use assistantPrematureTeamHandoff */
-export const assistantPrematureBakeryHandoff = assistantPrematureTeamHandoff;
+const assistantPrematureBakeryHandoff = assistantPrematureTeamHandoff;
 
 /** @deprecated Use assistantSpokeTeamHandoff */
-export const assistantSpokeBakeryHandoff = assistantSpokeTeamHandoff;
+const assistantSpokeBakeryHandoff = assistantSpokeTeamHandoff;
 
 export function assistantUsesBannedAiSlop(text: string): boolean {
   const t = text.trim().toLowerCase();
@@ -153,7 +153,7 @@ export function buildPrematureTeamHandoffSteer(): string {
 }
 
 /** @deprecated Use buildPrematureTeamHandoffSteer */
-export const buildPrematureBakeryHandoffSteer = buildPrematureTeamHandoffSteer;
+const buildPrematureBakeryHandoffSteer = buildPrematureTeamHandoffSteer;
 
 export function buildBannedSlopSteer(): string {
   return (

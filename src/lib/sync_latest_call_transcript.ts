@@ -58,7 +58,7 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export function resolveSyncLatestCallOptions(
+function resolveSyncLatestCallOptions(
   overrides?: SyncLatestCallOptions,
 ): Required<SyncLatestCallOptions> {
   return {
@@ -272,7 +272,7 @@ export function exportWaitOptionsFromArgv(argv: string[] = process.argv.slice(2)
 }
 
 /** Open latest.md in Cursor / VS Code when CARA_TRANSCRIPT_OPEN is not "0". */
-export function openTranscriptInEditor(filePath: string): void {
+function openTranscriptInEditor(filePath: string): void {
   if (process.env.CARA_TRANSCRIPT_OPEN?.trim() === '0') return;
   if (!existsSync(filePath)) return;
 

@@ -10,6 +10,7 @@ import {
   extractToolLinesFromTranscript,
 } from './call_diagnostic_bundle.js';
 import type { CallCostEstimateRecord } from './call_cost_estimate.js';
+import type { TranscriptCaptureEvidence } from './call_transcript_journal.js';
 import { assessTranscriptCompleteness, type TranscriptCompleteness } from './transcript_completeness.js';
 
 export type CallLatencySnapshot = {
@@ -19,6 +20,14 @@ export type CallLatencySnapshot = {
   replyP50?: number;
   replyP95?: number;
   userSpeakingToThinkingMs: number[];
+  replyTiming?: {
+    source: 'caller_vad_to_worker_audio';
+    observedCallerTurns: number;
+    measuredReplies: number;
+    unpairedTurns: number;
+    overlappedTurns: number;
+    captureComplete: boolean;
+  };
 };
 
 export type CallCloseDiagnosticsPayload = {
@@ -37,6 +46,7 @@ export type CallCloseDiagnosticsPayload = {
   recommendedChecks?: string[];
   toolLines?: string[];
   transcriptCompleteness?: TranscriptCompleteness;
+  transcriptCapture?: TranscriptCaptureEvidence;
   costEstimate?: CallCostEstimateRecord | null;
   postprocessRan?: boolean;
   knowledgeGapCount?: number;
@@ -110,6 +120,8 @@ export function buildCloseDiagnosticsPayload(input: {
   knowledgeGapCount?: number;
   greetingText?: string | null;
   isTestCall?: boolean;
+  transcriptCompleteness?: TranscriptCompleteness;
+  transcriptCapture?: TranscriptCaptureEvidence;
 }): CallCloseDiagnosticsPayload {
   const demoScenarioSlug =
     typeof input.sessionFlags?.demoScenarioSlug === 'string'
@@ -140,7 +152,8 @@ export function buildCloseDiagnosticsPayload(input: {
     ...(input.configSnapshot !== undefined ? { configSnapshot: input.configSnapshot } : {}),
     recommendedChecks,
     toolLines: extractToolLinesFromTranscript(input.transcript),
-    transcriptCompleteness: assessTranscriptCompleteness(input.transcript),
+    transcriptCompleteness: input.transcriptCompleteness ?? assessTranscriptCompleteness(input.transcript),
+    ...(input.transcriptCapture !== undefined ? { transcriptCapture: input.transcriptCapture } : {}),
     ...(input.costEstimate !== undefined ? { costEstimate: input.costEstimate } : {}),
     ...(input.postprocessRan !== undefined ? { postprocessRan: input.postprocessRan } : {}),
     ...(input.knowledgeGapCount !== undefined
@@ -151,6 +164,6 @@ export function buildCloseDiagnosticsPayload(input: {
   };
 }
 
-export function countDiagnosticErrors(events: CallDiagnosticEvent[]): number {
+function countDiagnosticErrors(events: CallDiagnosticEvent[]): number {
   return events.filter((e) => e.level === 'error').length;
 }

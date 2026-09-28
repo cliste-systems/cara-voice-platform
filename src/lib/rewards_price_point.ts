@@ -127,6 +127,9 @@ export type RewardsPricePointRow = {
   service_area: string | null;
   fulfilment: string | null;
   is_alcohol: boolean | null;
+  synced_at: string | null;
+  offer_week_start: string | null;
+  offer_week_end: string | null;
 };
 
 export type DirectRewardsPriceMatch = {
@@ -145,9 +148,21 @@ export function buildRewardsPricePointMatches(
   rows: RewardsPricePointRow[],
   amountEur: number,
   limit = 5,
+  reference = new Date(),
 ): DirectRewardsPriceMatch[] {
+  const referenceMs = reference.getTime();
+  const today = dublinDate(reference);
   const seen = new Set<string>();
   return rows
+    .filter((row) => {
+      const observedMs = Date.parse(String(row.synced_at ?? ''));
+      const start = String(row.offer_week_start ?? '');
+      const end = String(row.offer_week_end ?? '');
+      return Number.isFinite(observedMs) && observedMs <= referenceMs &&
+        observedMs >= referenceMs - 48 * 60 * 60 * 1000 &&
+        /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end) &&
+        start <= today && end >= today;
+    })
     .filter((row) => /\brewards?\s+price\b|\breal\s+rewards?\b/i.test(String(row.discount_label ?? '')))
     .filter((row) => Math.abs(Number(row.current_price_eur) - amountEur) <= 0.01)
     .sort(
@@ -184,13 +199,13 @@ export function buildRewardsPricePointMatches(
     });
 }
 
-function dublinDate(): string {
+function dublinDate(reference = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Dublin',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).formatToParts(new Date());
+  }).formatToParts(reference);
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? '';
   return `${value('year')}-${value('month')}-${value('day')}`;
@@ -201,18 +216,22 @@ export async function searchRewardsPricePointOffersDirect(input: {
   serviceArea?: string;
   limit?: number;
 }): Promise<DirectRewardsPriceMatch[]> {
-  const today = dublinDate();
+  const reference = new Date();
+  const today = dublinDate(reference);
+  const oldestObservation = new Date(reference.getTime() - 48 * 60 * 60 * 1000).toISOString();
   const supabase = getSupabaseClient();
   let query = supabase
     .from('retail_weekly_offers')
     .select(
-      'product_name,department,sku,current_price_eur,was_price_eur,discount_label,service_area,fulfilment,is_alcohol',
+      'product_name,department,sku,current_price_eur,was_price_eur,discount_label,service_area,fulfilment,is_alcohol,synced_at,offer_week_start,offer_week_end',
     )
     .eq('retail_banner', 'supervalu')
     .eq('is_national', true)
     .eq('current_price_eur', input.amountEur)
     .lte('offer_week_start', today)
     .gte('offer_week_end', today)
+    .gte('synced_at', oldestObservation)
+    .lte('synced_at', reference.toISOString())
     .ilike('discount_label', '%Reward%')
     .order('product_name', { ascending: true })
     .limit(50);
@@ -228,5 +247,6 @@ export async function searchRewardsPricePointOffersDirect(input: {
     (data ?? []) as RewardsPricePointRow[],
     input.amountEur,
     input.limit ?? 5,
+    reference,
   );
 }

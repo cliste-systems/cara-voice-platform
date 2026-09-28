@@ -1,3 +1,5 @@
+import { departmentClarification } from './department_clarification.js';
+import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
 import { llm, voice } from '@livekit/agents';
 import { z } from 'zod';
 
@@ -26,11 +28,13 @@ import {
 import { reportPlatformEvent } from './platform_event.js';
 import { playTypingSound } from './callback_audio.js';
 import { disconnectCallerLeg } from './end_call.js';
+import { deliverGptLiveToolResult } from './gpt_live_retail.js';
 import {
   isPlaceholderCallerName,
   staffSummaryLooksLikeSpeechOnlyQuestion,
 } from './conversational_retail_policy.js';
 import {
+  inferWeeklyOffersListIntent,
   resolveCatalogSearchIntent,
   type CatalogSearchIntent,
 } from './catalog_search_intent.js';
@@ -155,7 +159,7 @@ export type CaraAgentUserData = {
   callPersona?: CallPersona;
 };
 
-export const CARA_ALCOHOL_AGE_DISCLAIMER_ONCE =
+const CARA_ALCOHOL_AGE_DISCLAIMER_ONCE =
   'One-time reminder for this call: alcohol is age-restricted — you must be eighteen or over.';
 
 function readCaraUserData(ctx: { userData: unknown }): CaraAgentUserData {
@@ -189,85 +193,140 @@ async function maybeAcknowledgeToolStart(
   /* no-op — programmatic "just a moment" overlapped LLM speech and goodbye */
 }
 
-export async function sendCallerSms(
+const callerMessageBudgets = new WeakMap<CaraAgentUserData, { sent: Set<string>; pending: Set<string> }>();
+
+async function sendCallerSms(
   ud: CaraAgentUserData,
   to: string,
   body: string,
   toolName: string,
 ): Promise<{ ok: boolean; detail: string }> {
-  const startedAt = Date.now();
-  if (!ud.calledNumber.trim()) {
-    const detail = 'Missing dialed number for SMS routing.';
-    console.error('[sms]', { tool: toolName, to: maskPhone(to), ok: false, error: detail });
-    return { ok: false, detail };
+  const state = callerMessageBudgets.get(ud) ?? { sent: new Set<string>(), pending: new Set<string>() };
+  callerMessageBudgets.set(ud, state);
+  const key = `sms:${to.trim()}\n${body}`;
+  if (state.sent.has(key) || state.pending.has(key)) {
+    return { ok: false, detail: 'This message was already sent or is being sent.' };
   }
-
-  if (caraSmsDryRunEnabled()) {
-    const bodyPreview = body.length > 160 ? `${body.slice(0, 160)}…` : body;
-    console.info('[sms] dry_run', {
-      tool: toolName,
-      channel: 'dry_run',
-      calledNumber: maskPhone(ud.calledNumber),
-      to: maskPhone(to),
-      body: bodyPreview,
-      ok: true,
-      durationMs: Date.now() - startedAt,
-    });
-    return { ok: true, detail: 'Sent (dry run — no SMS delivered).' };
+  if (state.sent.size + state.pending.size >= 3) {
+    return { ok: false, detail: 'This call has reached its message limit.' };
   }
+  state.pending.add(key);
+  try {
+    const startedAt = Date.now();
+    if (!ud.calledNumber.trim()) {
+      const detail = 'Missing dialed number for SMS routing.';
+      console.error('[sms]', { tool: toolName, to: maskPhone(to), ok: false, error: detail });
+      return { ok: false, detail };
+    }
 
-  if (twilioSmsConfigured()) {
-    const twilioResult = await sendTwilioSms(to, body, {
-      organizationId: ud.organizationId,
-      fromE164: ud.calledNumber.trim(),
-      purpose: toolName,
+    if (caraSmsDryRunEnabled()) {
+      console.info('[sms] dry_run', {
+        tool: toolName,
+        channel: 'dry_run',
+        calledNumber: maskPhone(ud.calledNumber),
+        to: maskPhone(to),
+        ok: true,
+        durationMs: Date.now() - startedAt,
+      });
+      state.sent.add(key);
+      return { ok: true, detail: 'Sent (dry run — no SMS delivered).' };
+    }
+
+    if (twilioSmsConfigured()) {
+      const twilioResult = await sendTwilioSms(to, body, {
+        organizationId: ud.organizationId,
+        fromE164: ud.calledNumber.trim(),
+        purpose: toolName,
+      });
+      const logPayload = {
+        tool: toolName,
+        channel: 'twilio_direct',
+        calledNumber: maskPhone(ud.calledNumber),
+        to: maskPhone(to),
+        ok: twilioResult.ok,
+        error: twilioResult.ok ? undefined : 'provider_send_failed',
+        from: twilioResult.ok ? maskPhone(twilioResult.from) : undefined,
+        durationMs: Date.now() - startedAt,
+      };
+      if (!twilioResult.ok) {
+        console.error('[sms]', logPayload);
+        return { ok: false, detail: twilioResult.message };
+      }
+      console.info('[sms]', logPayload);
+      state.sent.add(key);
+      return { ok: true, detail: 'Sent.' };
+    }
+
+    if (!voiceWebhooksConfigured()) {
+      const detail = 'SMS is not configured on this worker.';
+      console.error('[sms]', { tool: toolName, to: maskPhone(to), ok: false, error: detail });
+      return { ok: false, detail };
+    }
+
+    const result = await postSendSms({
+      called_number: ud.calledNumber,
+      to,
+      body,
+      caller_consented: true,
+      skip_business_prefix: true,
     });
     const logPayload = {
       tool: toolName,
-      channel: 'twilio_direct',
+      channel: 'webhook',
       calledNumber: maskPhone(ud.calledNumber),
       to: maskPhone(to),
-      ok: twilioResult.ok,
-      error: twilioResult.ok ? undefined : twilioResult.message,
-      from: twilioResult.ok ? maskPhone(twilioResult.from) : undefined,
+      ok: result.ok,
+      error: result.ok ? undefined : 'webhook_send_failed',
       durationMs: Date.now() - startedAt,
     };
-    if (!twilioResult.ok) {
+    if (!result.ok) {
       console.error('[sms]', logPayload);
-      return { ok: false, detail: twilioResult.message };
+      return { ok: false, detail: result.error ?? 'SMS send failed.' };
     }
     console.info('[sms]', logPayload);
+    state.sent.add(key);
     return { ok: true, detail: 'Sent.' };
+  } finally {
+    state.pending.delete(key);
   }
-
-  if (!voiceWebhooksConfigured()) {
-    const detail = 'SMS is not configured on this worker.';
-    console.error('[sms]', { tool: toolName, to: maskPhone(to), ok: false, error: detail });
-    return { ok: false, detail };
+}
+async function sendCallerEmail(
+  ud: CaraAgentUserData,
+  to: string,
+  subject: string,
+  body: string,
+): Promise<{ ok: boolean; detail: string }> {
+  const callSessionId = ud.endCallTarget?.roomName.trim();
+  if (!callSessionId) {
+    return { ok: false, detail: 'Missing call session for email delivery.' };
   }
-
-  const result = await postSendSms({
-    called_number: ud.calledNumber,
-    to,
-    body,
-    caller_consented: true,
-    skip_business_prefix: true,
-  });
-  const logPayload = {
-    tool: toolName,
-    channel: 'webhook',
-    calledNumber: maskPhone(ud.calledNumber),
-    to: maskPhone(to),
-    ok: result.ok,
-    error: result.error,
-    durationMs: Date.now() - startedAt,
-  };
-  if (!result.ok) {
-    console.error('[sms]', logPayload);
-    return { ok: false, detail: result.error ?? 'SMS send failed.' };
+  const state = callerMessageBudgets.get(ud) ?? { sent: new Set<string>(), pending: new Set<string>() };
+  callerMessageBudgets.set(ud, state);
+  const key = `email:${to.trim().toLowerCase()}\n${subject}\n${body}`;
+  if (state.sent.has(key) || state.pending.has(key)) {
+    return { ok: false, detail: 'This message was already sent or is being sent.' };
   }
-  console.info('[sms]', logPayload);
-  return { ok: true, detail: 'Sent.' };
+  if (state.sent.size + state.pending.size >= 3) {
+    return { ok: false, detail: 'This call has reached its message limit.' };
+  }
+  state.pending.add(key);
+  try {
+    const result = await postSendCallerEmail({
+      called_number: ud.calledNumber,
+      call_session_id: callSessionId,
+      to,
+      subject,
+      body,
+      caller_consented: true,
+    });
+    if (!result.ok) {
+      return { ok: false, detail: 'Email delivery could not be confirmed. Offer to take a message.' };
+    }
+    state.sent.add(key);
+    return { ok: true, detail: 'Sent.' };
+  } finally {
+    state.pending.delete(key);
+  }
 }
 
 async function sendCallerLinkSms(
@@ -311,7 +370,7 @@ function resolveSmsDestination(ud: CaraAgentUserData, mobilePhone?: string): str
   return caller;
 }
 
-export async function createRetailCallbackTicket(
+async function createRetailCallbackTicket(
   ud: CaraAgentUserData,
   summary: string,
   options?: { phone?: string; callerName?: string },
@@ -507,17 +566,11 @@ export class CaraTools {
         }
         const subject = 'Directions';
         const body = `Here are directions to ${ud.businessName}:\n\n${linkUrl}`;
-        const mail = await postSendCallerEmail({
-          called_number: ud.calledNumber,
-          to: toEmail,
-          subject,
-          body,
-          caller_consented: true,
-        });
+        const mail = await sendCallerEmail(ud, toEmail, subject, body);
         if (!mail.ok) {
           return {
             ok: false,
-            message: SMS_FAILURE_MESSAGE,
+            message: mail.detail,
           };
         }
         ud.sessionFlags.linkSent = true;
@@ -561,7 +614,7 @@ export class CaraTools {
           message: 'File is not available to send. Take a message for the team.',
         };
       }
-      const signed = await createBusinessFileSignedUrl(file.storage_path);
+      const signed = await createBusinessFileSignedUrl({ organizationId: ud.organizationId, fileId: file.id });
       if (!signed) {
         return {
           ok: false,
@@ -839,14 +892,14 @@ export class CaraTools {
 
   readonly searchSuperValuProducts = llm.tool({
     description:
-      'MANDATORY for every product stock/range, price, or offer claim unless approved store knowledge explicitly answers it. Look up SuperValu products — stock, regular price, and synced weekly offers. Never decide from common sense that a supermarket does or does not sell something: search first, even for unusual requests such as laptops. Rewards/Real Rewards price-point browsing is supported: for questions like "what Rewards offers are €2.50?" call this tool with intent "offer" and preserve both Rewards and the exact amount in query; NEVER say you cannot search offers by price. Pass the caller\'s product words or offer filter — never generic "weekly offers". When the caller names a department/area, pass service_area immediately; when they name counter vs pre-pack, pass fulfilment immediately. Explicit service_area and fulfilment are hard scope and must not be silently widened. If genuinely ambiguous, ask ONE short clarification and wait. Quote only what this tool returns.',
+      'MANDATORY for every product stock/range, price, or offer claim unless approved store knowledge explicitly answers it. Look up SuperValu products — stock, regular price, and synced weekly offers. Never decide from common sense that a supermarket does or does not sell something: search first, even for unusual requests such as laptops. Rewards/Real Rewards price-point browsing is supported: for questions like "what Rewards offers are €2.50?" call this tool with intent "offer" and preserve both Rewards and the exact amount in query; NEVER say you cannot search offers by price. Pass the caller\'s product words, department browse, or exact offer filter. Generic "weekly offers", "meat offers", "Super 7", "multibuys", and "3 for 10" are supported; preserve campaign and bundle wording. Clarify an unscoped offer request by department first. For EVERY broad department, first establish what kind of product the caller wants. Naming alcohol, bakery, dairy, household, baby or any other department is not a product preference. Counter versus pre-packed alone does not resolve product type. Preserve the caller\'s chosen type in query, not just the department. If they explicitly request examples, preserve that wording in query. Search all requested departments; do not force household, frozen, baby, pet or health/beauty into grocery. When the caller names a department/area, pass service_area immediately; when they name counter vs pre-pack, pass fulfilment immediately. Explicit service_area and fulfilment are hard scope and must not be silently widened. Let the tool request clarification if a specific product needs it. An explicit named campaign can be searched directly; ask a scope question only when it materially affects the answer. Quote only current tool results, including bundle quantities, Rewards membership conditions and validity dates when given. National range does not guarantee local stock.',
     parameters: z.object({
       query: z
         .string()
         .min(2)
         .max(120)
         .describe(
-          'Caller\'s product words or supported offer filter — e.g. "steak", "salmon darnes", "Skyr yogurt", "meat counter ham", "Rewards 2.50"',
+          'Caller\'s product words or supported offer filter — e.g. "steak", "salmon darnes", "Skyr yogurt", "meat counter ham", "meat offers", "weekly offers", "household offers", "Super 7", "3 for 10", "Rewards 2.50"',
         ),
       intent: z
         .enum(['offer', 'price', 'stock'])
@@ -858,16 +911,20 @@ export class CaraTools {
         .enum(['butcher', 'deli', 'fish', 'produce', 'bakery', 'dairy', 'off_licence', 'grocery'])
         .optional()
         .describe(
-          'Structured department scope. Use butcher for butcher/meat counter, fish for fish counter, deli for deli, produce for fruit & veg, dairy for dairy wall/section, bakery for bakery, off_licence for actual wine/beer/spirits/Guinness, and grocery for general grocery. Do not route wine gums, beer-battered food, or cider-vinegar food to off_licence.',
+          'Structured department scope. Use butcher for meat/butcher, fish for fish/seafood, deli for deli, produce for fruit & veg, dairy for dairy, bakery for bakery, off_licence for actual wine/beer/spirits/Guinness, and grocery for general grocery. For multiple departments or departments absent from this list (frozen, household, baby, pet, health/beauty), keep the department words in query and leave service_area unset. Do not route wine gums, beer-battered food, or cider-vinegar food to off_licence.',
         ),
       fulfilment: z
         .enum(['counter', 'prepack'])
         .optional()
         .describe(
-          'Set counter when the caller clearly says meat/butcher/deli/fish counter, per kilo, by weight, or loose; set prepack when they clearly say pre-pack, packaged, meat/fish/chilled aisle. Leave unset only when genuinely ambiguous.',
+          'Set counter when the caller clearly says meat/butcher/deli/fish counter, per kilo, by weight, or loose; set prepack when they clearly say pre-pack, packaged, meat/fish/chilled aisle. Leave unset for broad offers across counter and pre-pack; never invent a fulfilment restriction.',
         ),
     }),
     execute: async ({ query, intent: explicitIntent, service_area: modelServiceArea, fulfilment }, { ctx }) => {
+      const finish = <T>(payload: T): T => {
+        deliverGptLiveToolResult(ctx, payload);
+        return payload;
+      };
       const ud = readCaraUserData(ctx);
       const trimmed = query.trim();
       const rewardsPricePoint =
@@ -889,6 +946,7 @@ export class CaraTools {
       const callerProvidedRefinement =
         pendingRefinementClarification &&
         pendingProductQuery &&
+        (!pendingState?.serviceArea || !(inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) || (inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) === pendingState.serviceArea) &&
         productQueryTokens(trimmed).length > 0 &&
         productQueryTokens(trimmed).length <= 3;
       const lookupQuery =
@@ -902,7 +960,7 @@ export class CaraTools {
       const effectiveFulfilment: RetailProductFulfilment | undefined =
         queryFulfilment ??
         fulfilment ??
-        (pendingFulfilmentClarification ? pendingState?.fulfilment : undefined);
+        ((pendingFulfilmentClarification || callerProvidedRefinement) ? pendingState?.fulfilment : undefined);
       const effectiveServiceArea: RetailProductServiceArea | undefined =
         queryServiceArea ??
         modelServiceArea ??
@@ -922,6 +980,17 @@ export class CaraTools {
             });
       if (resolvedIntent === 'offer') {
         ud.sessionFlags.callerAskedAboutOffers = true;
+      }
+
+      const broadQuestion = departmentClarification(lookupQuery);
+      if (broadQuestion && rewardsPricePoint == null) {
+        ud.sessionFlags.pendingProductRefinementClarification = true;
+        ud.sessionFlags.pendingProductFulfilmentClarification = false;
+        ud.sessionFlags.pendingProductLookupQuery = lookupQuery;
+        ud.sessionFlags.pendingProductSearchState = {
+          query: lookupQuery, ...(resolvedIntent ? {intent:resolvedIntent} : {}), ...(effectiveServiceArea ? {serviceArea:effectiveServiceArea} : {}), ...(effectiveFulfilment ? {fulfilment:effectiveFulfilment} : {}),
+        };
+        return finish({ok:true, clarification_required:true, message:`${CARA_CLARIFICATION_POLICY} Ask one short question about what kind of product the caller wants in the department they named. ${broadQuestion} Do not search, list products or prices, or say you are checking yet. Wait for their answer.`, matches:[]});
       }
 
       const payload: SearchSupervaluProductsPayload = {
@@ -963,19 +1032,19 @@ export class CaraTools {
             amountEur: rewardsPricePoint,
             error: detail,
           });
-          return {
+          return finish({
             ok: false,
             message:
               'I could not check the current Rewards price list just now. Do not guess or substitute a different price — offer a team callback to check.',
-          };
+          });
         }
       } else {
         if (!voiceWebhooksConfigured()) {
-          return {
+          return finish({
             ok: false,
             message:
               'Product lookup is not available on this call. Do not guess — offer a team callback captured in speech.',
-          };
+          });
         }
         result = await postSearchSupervaluProducts(payload);
       }
@@ -995,12 +1064,14 @@ export class CaraTools {
 
       if (
         rewardsPricePoint == null &&
+        !inferWeeklyOffersListIntent(lookupQuery) &&
+        !/\b(?:department|section|counter|aisle|household|frozen|baby|pets?|weekly)\b/i.test(lookupQuery) &&
         result.ok &&
         result.matches.length === 0 &&
         !result.clarificationHint
       ) {
         const fallbackQueries = buildProductFallbackQueries(lookupQuery).filter(
-          (candidate) => candidate.toLowerCase() !== lookupQuery.toLowerCase(),
+          (candidate) => candidate.toLowerCase() !== lookupQuery.toLowerCase() && !departmentClarification(candidate),
         );
         const recoveredMatches: SearchSupervaluProductsMatch[] = [];
         let firstUsefulRetry: typeof result | null = null;
@@ -1064,10 +1135,10 @@ export class CaraTools {
           calledNumber: ud.calledNumber,
           metadata: { query: trimmed, intent: resolvedIntent },
         });
-        return {
+        return finish({
           ok: false,
           message: `PRODUCT LOOKUP FAILED (${err}) — you did NOT check the offers list. Do NOT say nothing is on offer or that you checked the list. Apologise briefly and offer a team callback captured in speech.`,
-        };
+        });
       }
 
       if (result.clarificationHint) {
@@ -1091,11 +1162,11 @@ export class CaraTools {
                 ...(effectiveFulfilment ? { fulfilment: effectiveFulfilment } : {}),
               }
             : null;
-        return {
+        return finish({
           ok: true,
           message: `${result.clarificationHint} Do NOT quote any prices or product names in this turn.`,
           matches: result.matches,
-        };
+        });
       }
 
       ud.sessionFlags.pendingProductFulfilmentClarification = false;
@@ -1104,13 +1175,15 @@ export class CaraTools {
       ud.sessionFlags.pendingProductSearchState = null;
 
       if (result.matches.length === 0) {
-        return {
+        const staleOffers = result.offersFreshness?.trim();
+        return finish({
           ok: true,
-          message:
-            result.noMatchQuote ??
-            'No matching product found in the catalogue. Do not claim the store does not stock it and do not guess. Say you cannot confirm that product from the catalogue you checked and offer to get a team member to ring back to confirm availability. If the caller wants that, collect the product description and their first name for the post-call callback.',
+          message: CARA_CLARIFICATION_POLICY + '\n\n' + (staleOffers
+            ? `${staleOffers} ${result.noMatchQuote ?? 'No matching current result was returned for this request.'} Explain only the freshness limitation reported above. Do not infer that every department is missing, that the product is not sold, or that no offer exists. Offer a team check if the caller wants confirmation.`
+            : (result.noMatchQuote ??
+              'No matching product found in the catalogue. Do not claim the store does not stock it and do not guess. Say you cannot confirm that product from the catalogue you checked and offer to get a team member to ring back to confirm availability. If the caller wants that, collect the product description and their first name for the post-call callback.')),
           matches: [],
-        };
+        });
       }
 
       const formatted = result.matches
@@ -1126,18 +1199,18 @@ export class CaraTools {
 
       const offerPrefix =
         resolvedIntent === 'offer'
-          ? 'Use only these synced offer quotes. Lead with the saving, then the offer price, then the usual price — one short sentence each, spoken clearly with a pause between them. Do not mention payment on the phone. Never quote offers from memory.'
-          : 'Use this guidance — speak prices in natural Irish words exactly as given, in your own words. Never quote offers from memory.';
+          ? 'Use only these current offer quotes. For multibuys, state the quantity and total bundle price; never imply the bundle price is for one item. Preserve Rewards membership, mix-and-match, pack size, counter/pre-pack and date conditions. Mention a saving or usual price only when supplied. Only when the caller explicitly requested a rundown or examples, give a few useful examples across the requested scope; do not imply the examples are the entire offer range. Never quote offers from memory.'
+          : 'Use this guidance — speak prices in natural Irish words exactly as given, in your own words. A national catalogue match confirms national range only; claim local availability only if the returned quote explicitly confirms it. Never quote offers from memory.';
 
       const freshnessNote = result.offersFreshness?.trim()
         ? `${result.offersFreshness.trim()}\n\n`
         : '';
 
-      return {
+      return finish({
         ok: true,
-        message: `${freshnessNote}${offerPrefix}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        message: `${CARA_CLARIFICATION_POLICY}\n\n${freshnessNote}${offerPrefix}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
-      };
+      });
     },
   });
 
@@ -1201,7 +1274,14 @@ export class CaraTools {
     vertical?: OrgVertical;
     demoLine?: boolean;
     conversationalRetailLine?: boolean;
+    /** GPT-Live hangs up from Cara's spoken farewell — endPhoneCall would race the duplex audio. */
+    gptLive?: boolean;
   }) {
+    if (options?.conversationalRetailLine && options.gptLive) {
+      return {
+        searchSuperValuProducts: this.searchSuperValuProducts,
+      };
+    }
     if (options?.demoLine) {
       return {
         endPhoneCall: this.endPhoneCall,

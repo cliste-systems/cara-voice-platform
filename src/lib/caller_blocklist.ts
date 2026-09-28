@@ -22,7 +22,7 @@ export function blockedCallSpokenMessage(businessName: string): string {
   return `We're unable to put you through to ${name}. This line is operated by Hello Cara, and your number isn't authorised to connect. Goodbye.`;
 }
 
-export function blockedCallDashboardSummary(businessName: string): string {
+function blockedCallDashboardSummary(businessName: string): string {
   const name = businessName.trim() || 'your business';
   return `This caller tried to reach ${name}, but their number is on your blocklist. Hello Cara stopped the call before Cara could answer.`;
 }
@@ -123,7 +123,7 @@ function livekitHttpsHost(): string | null {
   return u.replace(/^wss?:\/\//, 'https://');
 }
 
-export function callSidFromParticipant(participant: RemoteParticipant): string | null {
+function callSidFromParticipant(participant: RemoteParticipant): string | null {
   const attrs = participant.attributes ?? {};
   const sid =
     attrs['sip.callID'] ??

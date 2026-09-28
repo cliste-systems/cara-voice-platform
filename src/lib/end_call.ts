@@ -1,4 +1,5 @@
 import { audioFramesFromFile, voice } from '@livekit/agents';
+import type { AudioFrame } from '@livekit/rtc-node';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -36,6 +37,29 @@ function hangupAudioOptions() {
     numChannels: 1,
     format: 'mp3' as const,
   };
+}
+
+/** Hang-up clip as 24 kHz mono frames — for playout paths that bypass `session.say` (GPT-Live). */
+export async function loadHangupClipFrames(): Promise<AudioFrame[]> {
+  const resolvedPath = resolveHangupSoundPath();
+  const stream = resolvedPath
+    ? audioFramesFromFile(resolvedPath, hangupAudioOptions())
+    : hangupSoundDisabled()
+      ? null
+      : phoneHangupToneFrameStream();
+  if (!stream) return [];
+  const frames: AudioFrame[] = [];
+  const reader = stream.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      frames.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return frames;
 }
 
 export function waitForSpeechHandlePlayout(handle: {
@@ -118,7 +142,7 @@ function normalizeGoodbyeText(text: string): string {
     .toLowerCase();
 }
 
-export { buildWarmCallClosingLine, softenSpokenFarewell } from './natural_phrasing.js';
+export { buildWarmCallClosingLine } from './natural_phrasing.js';
 
 export async function waitForAgentSpeechPlayout(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -148,7 +172,7 @@ export async function waitForAgentSpeechPlayout(
 }
 
 export type EndCallUserData = CallRecordingStopState & {
-  sessionFlags: { endPhoneCallUsed: boolean };
+  sessionFlags: { endPhoneCallUsed: boolean; closingCall?: boolean };
   endCallTarget?: { roomName: string; callerIdentity: string };
 };
 
@@ -159,11 +183,49 @@ export async function waitForSessionPlayout(
   await waitForAgentSpeechPlayout(session);
 }
 
+async function playHangupSound(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  session: voice.AgentSession<any>,
+): Promise<boolean> {
+  const resolvedPath = resolveHangupSoundPath();
+
+  if (resolvedPath) {
+    try {
+      const audio = audioFramesFromFile(resolvedPath, hangupAudioOptions());
+      const handle = session.say('', {
+        audio,
+        addToChatCtx: false,
+        allowInterruptions: false,
+      });
+      await waitForSpeechHandlePlayout(handle);
+      return true;
+    } catch (e) {
+      console.error('[end_call] hang-up sound file', e);
+    }
+  }
+
+  if (hangupSoundDisabled()) return false;
+
+  try {
+    const handle = session.say('', {
+      audio: phoneHangupToneFrameStream(),
+      addToChatCtx: false,
+      allowInterruptions: false,
+    });
+    await waitForSpeechHandlePlayout(handle);
+    return true;
+  } catch (e) {
+    console.error('[end_call] generated hang-up tone', e);
+    return false;
+  }
+}
+
 export async function disconnectCallerLeg(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   session: voice.AgentSession<any>,
   ud: EndCallUserData,
   beforeAudio: () => Promise<void>,
+  opts?: { skipHangupTone?: boolean },
 ): Promise<{ ok: boolean; message: string }> {
   if (ud.sessionFlags.endPhoneCallUsed) {
     return { ok: false, message: 'Hang-up already requested; do not speak again.' };
@@ -188,42 +250,43 @@ export async function disconnectCallerLeg(
     };
   }
   ud.sessionFlags.endPhoneCallUsed = true;
+  ud.sessionFlags.closingCall = true;
+
 
   try {
     await beforeAudio();
-    await waitForAgentSpeechPlayout(session);
+    if (!opts?.skipHangupTone) {
+      await waitForAgentSpeechPlayout(session);
+    }
     await stopActiveCallRecording(ud, 'end_phone_call_farewell');
 
-    const resolvedPath = resolveHangupSoundPath();
+    const client = new RoomServiceClient(host, key, secret);
+    const removeCaller = async (): Promise<void> => {
+      await client.removeParticipant(target.roomName.trim(), target.callerIdentity.trim());
+    };
 
-    let playedSound = false;
-    if (resolvedPath) {
+    if (opts?.skipHangupTone) {
       try {
-        const audio = audioFramesFromFile(resolvedPath, hangupAudioOptions());
-        const handle = session.say('', {
-          audio,
-          addToChatCtx: false,
-          allowInterruptions: false,
-        });
-        await waitForSpeechHandlePlayout(handle);
-        playedSound = true;
+        await removeCaller();
       } catch (e) {
-        console.error('[end_call] hang-up sound file', e);
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/does not exist|not found/i.test(msg)) {
+          throw e;
+        }
       }
+      return {
+        ok: true,
+        message:
+          'Call is ending. Do not generate more speech unless the caller speaks again before disconnect.',
+      };
     }
 
-    if (!playedSound && !hangupSoundDisabled()) {
-      try {
-        const handle = session.say('', {
-          audio: phoneHangupToneFrameStream(),
-          addToChatCtx: false,
-          allowInterruptions: false,
-        });
-        await waitForSpeechHandlePlayout(handle);
-        playedSound = true;
-      } catch (e) {
-        console.error('[end_call] generated hang-up tone', e);
-      }
+    // Play tone right after farewell playout — GPT-Live can pause scheduling before the
+    // second wait finishes, which previously dropped the hang-up sound entirely.
+    let playedSound = await playHangupSound(session);
+
+    if (!playedSound) {
+      playedSound = await playHangupSound(session);
     }
 
     const postSoundMs = Number.parseInt(process.env.LIVEKIT_END_CALL_POST_SOUND_MS ?? '80', 10);
@@ -237,8 +300,14 @@ export async function disconnectCallerLeg(
         : 1200;
     await new Promise((r) => setTimeout(r, extraMs));
 
-    const client = new RoomServiceClient(host, key, secret);
-    await client.removeParticipant(target.roomName.trim(), target.callerIdentity.trim());
+    try {
+      await removeCaller();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/does not exist|not found/i.test(msg)) {
+        throw e;
+      }
+    }
     return {
       ok: true,
       message:
@@ -248,6 +317,7 @@ export async function disconnectCallerLeg(
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[end_call]', msg);
     ud.sessionFlags.endPhoneCallUsed = false;
+    ud.sessionFlags.closingCall = false;
     return {
       ok: false,
       message: `Hang-up failed (${msg}). Say goodbye and ask them to hang up.`,

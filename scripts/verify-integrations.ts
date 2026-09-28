@@ -47,7 +47,7 @@ async function main(): Promise<void> {
         const ct = res.headers.get('content-type') ?? '';
         if (ct.includes('text/html')) {
           const msg =
-            'Voice webhook /api/voice/send-sms returns HTML 404 — deploy code-base-1 or use direct Twilio on worker';
+            'Voice webhook /api/voice/send-sms returns HTML 404 — deploy cara-platform or use direct Twilio on worker';
           if (twilioSmsConfigured()) {
             console.warn(`⚠ ${msg} (direct Twilio path available)`);
           } else {

@@ -137,7 +137,7 @@ function dateForWeekdayFromNow(
 }
 
 /** Resolve the calendar day the caller is asking about for hours (today / tomorrow / named weekday). */
-export function hoursQuestionDate(text: string, timeZone: string, ref = new Date()): Date | null {
+function hoursQuestionDate(text: string, timeZone: string, ref = new Date()): Date | null {
   const lower = text.toLowerCase();
   if (/\btomorrow\b/.test(lower)) return addDays(ref, 1);
   if (/\btoday\b/.test(lower)) return ref;
@@ -311,7 +311,7 @@ export function hoursLineForWeekday(raw: unknown, day: (typeof WEEKDAY_NAMES)[nu
 }
 
 /** Tomorrow's weekday in the org timezone. */
-export function tomorrowWeekdayKey(timeZone: string): (typeof WEEKDAY_NAMES)[number] | null {
+function tomorrowWeekdayKey(timeZone: string): (typeof WEEKDAY_NAMES)[number] | null {
   const d = new Date(Date.now() + 86_400_000);
   return weekdayKeyFromDate(d, timeZone);
 }

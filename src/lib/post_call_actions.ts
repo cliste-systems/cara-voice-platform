@@ -75,7 +75,7 @@ export function normalizePostCallActions(raw: unknown): PostCallAction[] {
   return out;
 }
 
-export function postCallActionsExpectTicket(actions: PostCallAction[]): boolean {
+function postCallActionsExpectTicket(actions: PostCallAction[]): boolean {
   return actions.some((action) => action.type === 'action_ticket' || action.type === 'manager_callback');
 }
 

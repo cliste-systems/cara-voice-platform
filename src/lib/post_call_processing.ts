@@ -16,7 +16,7 @@ export type PostCallErrorEntry = {
 
 export type ActionTicketDeliveryStatus = 'confirmed' | 'pending_review' | 'failed';
 
-export function appendPostCallError(
+function appendPostCallError(
   existing: PostCallErrorEntry[],
   stage: PostCallErrorStage,
   message: string,
@@ -42,7 +42,7 @@ export function computeFinalPostCallStatus(input: {
   return 'partial';
 }
 
-export async function sleepMs(ms: number): Promise<void> {
+async function sleepMs(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 

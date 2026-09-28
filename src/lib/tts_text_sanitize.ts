@@ -64,7 +64,7 @@ export function setActiveTtsModelForSanitizer(model: string): void {
   activeTtsModel = model.trim() || 'cartesia/sonic-3.6';
 }
 
-export function getActiveTtsModelForSanitizer(): string {
+function getActiveTtsModelForSanitizer(): string {
   return activeTtsModel;
 }
 
@@ -199,7 +199,7 @@ const CARTESIA_COMMA_BEFORE_QUESTION =
   /,\s*(?=(?:want to|would you|what|who|are you|is there|is that|do you|did you|can you|could you|how)\b)/gi;
 
 /** Demo outro / goodbye chunks — slower TTS pacing than mid-call speech. */
-export function isFarewellSpeechChunk(text: string): boolean {
+function isFarewellSpeechChunk(text: string): boolean {
   const t = text.toLowerCase();
   return (
     /\bthanks for calling\b/.test(t) ||
@@ -231,7 +231,7 @@ export function prepareCartesiaGreetingChunk(text: string, ttsModel = activeTtsM
 }
 
 /** Slower retail store opening — natural pauses at sentence boundaries only. */
-export function prepareCartesiaRetailOpeningChunk(text: string, ttsModel = activeTtsModel): string {
+function prepareCartesiaRetailOpeningChunk(text: string, ttsModel = activeTtsModel): string {
   let out = normalizeCartesiaBase(text, ttsModel);
   out = out.replace(/([.!?]+)\s*(?=[A-Za-z"'(])/g, `${CARTESIA_RETAIL_OPENING_BREAK} `);
   out = out.replace(/[.!]+\s*$/g, '');
@@ -339,7 +339,7 @@ export type BuildTtsNodeInputOptions = {
 };
 
 /** Collect programmatic speech into one Cartesia chunk (session.say full greeting). */
-export function streamCartesiaSingleUtterance(source: ReadableStream<string>): ReadableStream<string> {
+function streamCartesiaSingleUtterance(source: ReadableStream<string>): ReadableStream<string> {
   return new ReadableStream<string>({
     async start(controller) {
       const reader = source.getReader();

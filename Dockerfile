@@ -19,7 +19,7 @@ ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache
 
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci
 
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
@@ -48,6 +48,7 @@ COPY --from=build --chown=appuser:appuser /app/package.json /app/package-lock.js
 COPY --from=build --chown=appuser:appuser /app/node_modules ./node_modules
 COPY --from=build --chown=appuser:appuser /app/dist ./dist
 COPY --from=build --chown=appuser:appuser /app/.cache ./.cache
+COPY --chown=appuser:appuser assets ./assets
 
 USER appuser
 

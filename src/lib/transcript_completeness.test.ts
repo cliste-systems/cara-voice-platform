@@ -37,6 +37,7 @@ describe('assessTranscriptCompleteness', () => {
     const transcript =
       'Assistant: Hello\n\nCaller: Are you open?\n\nCaller: Cake order please\n\nCaller: Brendan';
     assert.equal(isCallerHeavyAssistantMissingTranscript(transcript), true);
+    assert.equal(assessTranscriptCompleteness(transcript).complete, false);
     assert.equal(isCallerHeavyAssistantMissingTranscript('Assistant: Hi\n\nCaller: One line'), false);
   });
 });

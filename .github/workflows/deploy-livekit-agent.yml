@@ -9,16 +9,22 @@ concurrency:
   group: livekit-agent-deploy
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npm run build
       - run: npm test
       - run: npm run test:demo-golden
@@ -28,13 +34,27 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: npm
       - name: Install LiveKit CLI
-        run: curl -sSL https://get.livekit.io/cli | bash
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/lk_2.18.8_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location \
+            https://github.com/livekit/livekit-cli/releases/download/v2.18.8/lk_2.18.8_linux_amd64.tar.gz \
+            --output "$archive"
+          echo "3e0977d0385d2f220d7f455105ac52f8035f79e70aecdf70b6dc054179905c7c  $archive" | sha256sum --check --strict
+          install_dir="${RUNNER_TEMP}/livekit-cli"
+          mkdir -p "$install_dir"
+          tar --extract --gzip --file "$archive" --directory "$install_dir" lk
+          chmod 0755 "$install_dir/lk"
+          echo "$install_dir" >> "$GITHUB_PATH"
       - name: Deploy agent to LiveKit Cloud
         env:
           LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}

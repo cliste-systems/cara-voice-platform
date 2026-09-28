@@ -1,3 +1,4 @@
+import { createCallTranscriptJournal } from './lib/call_transcript_journal.js';
 import 'dotenv/config';
 
 import * as lkTurn from '@livekit/agents-plugin-livekit';
@@ -6,9 +7,13 @@ import {
   buildGptLiveRetailOpeningInstructions,
   createGptLiveRetailModel,
   rejectGptLiveUnavailableCall,
+  resolveGptLiveAudioQueueMs,
   shouldUseGptLiveRetailStack,
+  gptLiveUtteranceEndsWithFarewell,
+  type AssistantSpeechWaitOutcome,
 } from './lib/gpt_live_retail.js';
 import * as silero from '@livekit/agents-plugin-silero';
+import type { createGptLiveResponseTiming } from './lib/gpt_live_response_timing.js';
 import {
   type JobContext,
   type JobProcess,
@@ -18,8 +23,8 @@ import {
   inference,
   voice,
 } from '@livekit/agents';
-import type { RemoteParticipant } from '@livekit/rtc-node';
-import { RoomEvent } from '@livekit/rtc-node';
+import type { AudioFrame, RemoteParticipant, RemoteTrack } from '@livekit/rtc-node';
+import { ParticipantKind, RoomEvent, TrackKind, TrackPublishOptions, TrackSource } from '@livekit/rtc-node';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +32,8 @@ import {
   buildActiveKnowledgeBlockForCall,
   loadActiveTemporalUpdates,
 } from './lib/active_knowledge_for_call.js';
-import { buildCaraCallPrompt } from './lib/cara_prompt.js';
+import { buildCaraCallPrompt, buildGptLiveRetailCallPrompt } from './lib/cara_prompt.js';
+import { loadGptLiveVerifiedOpening } from './lib/gpt_live_verified_opening.js';
 import { resolveAiDisclosure } from './lib/ai_disclosure.js';
 import { CaraTools, type CaraAgentUserData } from './lib/cara_tools.js';
 import {
@@ -71,6 +77,7 @@ import {
   assistantTextSoundsLikeTerminalHangup,
   buildWarmCallClosingLine,
   disconnectCallerLeg,
+  loadHangupClipFrames,
   waitForAgentSpeechPlayout,
   waitForSessionPlayout,
   waitForSpeechHandlePlayout,
@@ -160,6 +167,7 @@ import {
   callerPivotedFromSmsConsent,
   callerSaidNothingElse,
   callerSoundsLikeAffirmativeConsent,
+  callerSoundsLikeFollowUpRequest,
   callerSoundsLikeWindDownEcho,
   callerWindingDownCall,
   callerSoundsLikeCallerFrustration,
@@ -341,7 +349,6 @@ function noteCallerGarble(
   if (!detectLikelySttGarble(text)) return;
   flags.likelySttGarble = true;
   console.info('[agent] likely_stt_garble', {
-    snippet: text.slice(0, 100),
     orgId: organizationId,
   });
 }
@@ -527,12 +534,23 @@ export default defineAgent({
     await ctx.connect();
     const participant = await ctx.waitForParticipant();
     const routing = resolveOrgRouting(ctx.job, participant);
-
-    const org = await getOrgForCall({
-      ...(routing.organizationId ? { organizationId: routing.organizationId } : {}),
-      ...(routing.slug ? { slug: routing.slug } : {}),
-      ...(routing.phone ? { phone: routing.phone } : {}),
-    });
+    // A SIP call is bound to the trunk's dialed number, never an organization
+    // hint supplied through job, room, or participant metadata.
+    const sipDialedNumber = participant.kind === ParticipantKind.SIP
+      ? routingFromParticipantAttributes(participant.attributes).phone
+      : undefined;
+    if (participant.kind === ParticipantKind.SIP && !sipDialedNumber) {
+      console.error('[agent] SIP call has no trusted dialed number');
+      ctx.shutdown('missing_sip_dialed_number');
+      return;
+    }
+    const org = await getOrgForCall(sipDialedNumber
+      ? { phone: sipDialedNumber }
+      : {
+          ...(routing.organizationId ? { organizationId: routing.organizationId } : {}),
+          ...(routing.slug ? { slug: routing.slug } : {}),
+          ...(routing.phone ? { phone: routing.phone } : {}),
+        });
     if (!org) {
       console.error('[agent] no organization for routing', {
         slug: routing.slug,
@@ -735,6 +753,17 @@ export default defineAgent({
     });
     const useDemoPersonaGreeting = testCall && !factoryFreshLine;
     const useConversationalOpening = useDemoPersonaGreeting || conversationalRetailLine;
+    const roomName =
+      (typeof ctx.room.name === 'string' && ctx.room.name.trim()) ||
+      (ctx.job.room && typeof (ctx.job.room as { name?: string }).name === 'string'
+        ? String((ctx.job.room as { name: string }).name).trim()
+        : '') ||
+      '';
+    const textRehearsalMode = isTextRehearsalSession({
+      jobMetadata: ctx.job.metadata ?? null,
+      roomMetadata: ctx.room.metadata ?? null,
+      roomName,
+    });
     const playbackGreetingText = factoryFreshLine
       ? greetingText || "Hello, you're through to Cara."
       : useDemoPersonaGreeting && callPersona
@@ -755,7 +784,21 @@ export default defineAgent({
       personaGreeting: useDemoPersonaGreeting,
     });
 
-    const systemPrompt = buildCaraCallPrompt({
+    const verifiedGptLiveOpening = gptLiveRetail && !textRehearsalMode && playbackGreetingText.trim()
+      ? await loadGptLiveVerifiedOpening(playbackGreetingText, gptLiveRetail.voice)
+      : undefined;
+    if (verifiedGptLiveOpening) gptLiveRetail!.setVerifiedOpening(verifiedGptLiveOpening);
+
+    const buildPrompt =
+      activeGptLiveRetail && conversationalRetailLine && !(testCall && !factoryFreshLine)
+        ? (input: Parameters<typeof buildCaraCallPrompt>[0]) =>
+            buildGptLiveRetailCallPrompt({
+              ...input,
+              openingLine: playbackGreetingText,
+              verifiedOpeningPlayed: Boolean(verifiedGptLiveOpening),
+            })
+        : buildCaraCallPrompt;
+    const systemPrompt = buildPrompt({
       businessName: conversationalRetailLine
         ? resolveConversationalRetailBusinessName({
             name: org.name,
@@ -803,6 +846,9 @@ export default defineAgent({
     const callStartedAt = Date.now();
     const diag = createCallDiagnosticSession();
     const latencyTracker = createCallLatencyTracker(callStartedAt);
+    let responseTimingSnapshot: (() => ReturnType<ReturnType<typeof createGptLiveResponseTiming>['snapshot']> | undefined) | undefined;
+    let finishResponseTiming: (() => Promise<void>) | undefined;
+    const callLatencySnapshot = () => ({ ...latencyTracker.snapshot(), ...responseTimingSnapshot?.() });
     let greetingPlayedFlag = false;
     let greetingSource: 'cached_pcm' | 'live_tts' | 'gpt_live' | null = null;
     const pipelineIncidentPosted = new Set<string>();
@@ -810,23 +856,12 @@ export default defineAgent({
       typeof (ctx.job as { id?: string }).id === 'string'
         ? (ctx.job as { id: string }).id
         : null;
-    const roomName =
-      (typeof ctx.room.name === 'string' && ctx.room.name.trim()) ||
-      (ctx.job.room && typeof (ctx.job.room as { name?: string }).name === 'string'
-        ? String((ctx.job.room as { name: string }).name).trim()
-        : '') ||
-      '';
     const callSidAttr = stableCallSidFallback(participant, roomName);
     const engineerTestCall = isEngineerTestCall({
       callerNumber: callerNumberRaw,
       roomName,
       jobMetadata: ctx.job.metadata ?? null,
       roomMetadata: ctx.room.metadata ?? null,
-    });
-    const textRehearsalMode = isTextRehearsalSession({
-      jobMetadata: ctx.job.metadata ?? null,
-      roomMetadata: ctx.room.metadata ?? null,
-      roomName,
     });
     const billableCall = !testCall && !engineerTestCall && !textRehearsalMode;
     if (engineerTestCall) {
@@ -854,6 +889,14 @@ export default defineAgent({
         organizationId: org.id,
         billingPeriodStart,
       });
+      if (used == null) {
+        console.error('[agent] quota lookup unavailable — refusing metered call', { orgId: org.id });
+        if (roomName && participant.identity) {
+          try { await disconnectParticipant(roomName, participant.identity); }
+          catch (error) { console.error('[agent] quota refusal disconnect failed', error); }
+        }
+        return;
+      }
       if (used != null) {
         const burstPct = Number.isFinite(burstPctRaw) ? burstPctRaw : 10;
         const burstAllowance = Math.max(
@@ -1146,6 +1189,8 @@ export default defineAgent({
       sttLanguage: inferenceSttLanguage,
       gptLiveRetail: activeGptLiveRetail,
       gptLiveVoice: gptLiveRetail?.voice ?? null,
+      gptLiveOutputDtx: activeGptLiveRetail ? false : null,
+      gptLiveOutputRed: activeGptLiveRetail ? true : null,
     };
 
     console.info('[agent] pipeline', pipelineLabel);
@@ -1180,6 +1225,14 @@ export default defineAgent({
           llm: llmInstance,
           userData: sessionUserData,
           maxToolSteps: 5,
+          // GPT-Live streams PCM directly — TTS transcript sync cuts audio mid-word (static).
+          useTtsAlignedTranscript: false,
+          // Local turn detector + barge-in pauses RoomIO output and discards queued PCM (clicks).
+          aecWarmupDuration: 0,
+          turnHandling: {
+            turnDetection: 'realtime_llm',
+            interruption: { enabled: false, discardAudioIfUninterruptible: false },
+          },
         })
       : new voice.AgentSession<CaraAgentUserData>({
           stt: sessionStt!,
@@ -1335,6 +1388,7 @@ export default defineAgent({
     let greetingPlayoutComplete = false;
     let lastAssistantSpeechHandle: {
       done(): boolean;
+      interrupted?: boolean;
       addDoneCallback: (cb: (sh: unknown) => void) => void;
     } | null = null;
     const callRecordingControl = {
@@ -1353,9 +1407,102 @@ export default defineAgent({
     let thinkingStartedAt: number | null = null;
     let userStoppedSpeakingAt: number | null = null;
     let sttFailureDetected = false;
+    const gptLiveAudioQueueMs = activeGptLiveRetail ? resolveGptLiveAudioQueueMs() : 0;
     let ttsFailureDetected = false;
     let sttRecoverySpeechPlayed = false;
+    /** GPT-Live 9508 — our STT/barge-in guards fight duplex and cause mid-sentence cuts. */
+    const gptLiveDuplexHandsOff = activeGptLiveRetail && bareLiveKitRetailLane;
+    let caraVoiceAgentRef: voice.Agent<CaraAgentUserData> | null = null;
+    let lastGptLiveInputUnmuteAt = 0;
+    let gptLiveHangupInFlight = false;
 
+    const resolveGptLivePlayout = (): {
+      playClip(frames: AudioFrame[]): Promise<number>;
+      playVerifiedOpening(): Promise<void>;
+      waitForAssistantSpeechToFinish(opts: {
+        after: number;
+        quietMs: number;
+        noReplyMs: number;
+        maxMs: number;
+      }): Promise<AssistantSpeechWaitOutcome>;
+      onAssistantUtterance(cb: (utterance: string) => void): void;
+      onTranscriptEvent(cb: (event: {source:string;text:string;at:number;metadata:Record<string,unknown>}) => void): void;
+      onAssistantSegment(cb: (event: {text:string;at:number;interrupted:boolean}) => void): void;
+      flushAssistantTranscript(interrupted?: boolean): void;
+      enableResponseTiming(vad: silero.VAD): void;
+      responseTimingSnapshot(): ReturnType<ReturnType<typeof createGptLiveResponseTiming>['snapshot']> | undefined;
+      finishResponseTiming(): Promise<void>;
+    } | null => {
+      if (!caraVoiceAgentRef) return null;
+      try {
+        const duplex = caraVoiceAgentRef.duplexSession as {
+          playClip?: unknown;
+          playVerifiedOpening?: unknown;
+          waitForAssistantSpeechToFinish?: unknown;
+          onAssistantUtterance?: unknown;
+        };
+        return typeof duplex?.playClip === 'function' &&
+          typeof duplex.playVerifiedOpening === 'function' &&
+          typeof duplex.waitForAssistantSpeechToFinish === 'function' &&
+          typeof duplex.onAssistantUtterance === 'function'
+          ? (duplex as unknown as NonNullable<ReturnType<typeof resolveGptLivePlayout>>)
+          : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const resolveGptLiveInputSession = (): {
+      muteInput?: () => void;
+      unmuteInput?: () => void;
+    } | null => {
+      if (!caraVoiceAgentRef) return null;
+      try {
+        return caraVoiceAgentRef.duplexSession as {
+          muteInput?: () => void;
+          unmuteInput?: () => void;
+        };
+      } catch {
+        return null;
+      }
+    };
+
+    const muteGptLiveCallerInput = (reason: string) => {
+      if (!activeGptLiveRetail) return;
+      try {
+        const gptLive = resolveGptLiveInputSession();
+        if (typeof gptLive?.muteInput !== 'function') {
+          return;
+        }
+        gptLive.muteInput();
+        console.info('[agent] gpt_live_input_muted', { reason });
+        diag.push('info', 'gpt_live_input_muted', { reason });
+      } catch (err) {
+      }
+    };
+
+    const ensureGptLiveCallerInputOpen = (reason: string, opts?: { force?: boolean }) => {
+      if (!activeGptLiveRetail) return;
+      const now = Date.now();
+      if (!opts?.force && now - lastGptLiveInputUnmuteAt < 1200) return;
+      try {
+        const gptLive = resolveGptLiveInputSession();
+        if (typeof gptLive?.unmuteInput !== 'function') {
+          return;
+        }
+        gptLive.unmuteInput();
+        lastGptLiveInputUnmuteAt = now;
+        console.info('[agent] gpt_live_input_unmuted', { reason });
+        diag.push('info', 'gpt_live_input_unmuted', { reason });
+      } catch (err) {
+      }
+    };
+
+    const transcriptJournal = createCallTranscriptJournal(getSupabaseClient(), {
+      organizationId: org.id, roomName, startedAt: callStartedAt,
+    });
+    let gptLiveTranscriptCaptured = false;
+    const transcriptCaptureIssues: string[] = [];
     const transcriptParts: TranscriptLine[] = [];
     let transcriptSeq = 0;
     const recentCallerTranscripts = new Map<string, number>();
@@ -1412,6 +1559,7 @@ export default defineAgent({
     };
 
     const syncAssistantTranscriptFromHistory = (at: number): number => {
+      if (activeGptLiveRetail && gptLiveTranscriptCaptured) return 0;
       const logged = new Set(
         transcriptParts
           .filter((part) => part.line.startsWith('Assistant:'))
@@ -1463,6 +1611,7 @@ export default defineAgent({
     };
 
     const flushPendingAssistantTranscript = (at: number, interrupted = false): boolean => {
+      if (activeGptLiveRetail && gptLiveTranscriptCaptured) return false;
       const pending = lastAssistantChatText.trim();
       if (pending) {
         const appended = appendAssistantTranscriptLine(pending, at, interrupted);
@@ -1475,6 +1624,7 @@ export default defineAgent({
     };
 
     const appendTranscriptLine = (at: number, line: string) => {
+      transcriptJournal.record('formatted_turn', line.startsWith('Caller:') ? 'caller' : 'assistant', line, {at});
       transcriptParts.push({ at, seq: transcriptSeq++, line });
     };
 
@@ -1485,6 +1635,7 @@ export default defineAgent({
       listenGraceUntil > 0 && Date.now() < listenGraceUntil;
 
     const bumpReplyTurn = (reason: string) => {
+      if (gptLiveDuplexHandsOff) return;
       replyTurnEpoch += 1;
       generateReplyInFlight = false;
       generateReplyStartedAt = 0;
@@ -1522,6 +1673,12 @@ export default defineAgent({
       opts?: { force?: boolean },
     ) => {
       if (isCallEnding()) return;
+      if (
+        gptLiveDuplexHandsOff &&
+        (session.agentState === 'speaking' || session.agentState === 'thinking')
+      ) {
+        return;
+      }
       const epoch = replyTurnEpoch;
       if (generateReplyInFlight && !opts?.force) {
         const stalledFor = Date.now() - generateReplyStartedAt;
@@ -1597,6 +1754,8 @@ export default defineAgent({
               : String(err);
       console.error('[AgentSession] pipeline error', msg, err);
       const stage = classifyPipelineErrorStage(msg);
+      transcriptJournal.record('pipeline_error','system',msg,{stage});
+      if (stage === 'stt') transcriptCaptureIssues.push('Speech recognition reported an error');
       diag.push('error', `pipeline_${stage}_error`, { message: msg, stage });
       if (stage === 'stt') {
         sttFailureDetected = true;
@@ -1720,6 +1879,12 @@ export default defineAgent({
 
     const sayProgrammatic = (text: string, opts?: Parameters<typeof sayPrepared>[2]) => {
       programmaticSpeechPending += 1;
+      if (activeGptLiveRetail) {
+        session.generateReply({
+          instructions: `Say this on the phone, naturally and clearly, then listen: "${text.trim()}"`,
+        });
+        return;
+      }
       sayPrepared(session, text, { addToChatCtx: false, ...opts });
     };
 
@@ -1778,12 +1943,10 @@ export default defineAgent({
         if (source.startsWith('stt_')) {
           console.info('[agent] demo_close_armed_early', {
             source,
-            snippet: text.slice(0, 120),
-          });
+              });
           diag.push('info', 'demo_close_armed_early', {
             source,
-            snippet: text.slice(0, 120),
-          });
+              });
         }
       }
       flags.closingCall = true;
@@ -1803,6 +1966,9 @@ export default defineAgent({
       questionText: string,
       opts?: { correcting?: boolean; apologise?: boolean },
     ): boolean => {
+      // 9508 GPT-Live bare lane — let the duplex model answer; programmatic say() interrupts
+      // realtime generation mid-stream and causes segment-sync glitches on WebRTC admin demos.
+      if (bareLiveKitRetailLane || activeGptLiveRetail) return false;
       if (session.userData.sessionFlags.endPhoneCallUsed) return false;
       const reply = buildRetailHoursSpokenReply(org.business_hours, questionText, orgTz, {
         ...(opts?.correcting !== undefined ? { correcting: opts.correcting } : {}),
@@ -1835,12 +2001,14 @@ export default defineAgent({
       }
       resetClosePhaseIfCallerContinues(text);
       noteCallerTurnNeedsReply(text);
-      // #region agent log
-      if (conversationalRetailLine && trimmed.length > 0) {
-        fetch('http://127.0.0.1:7662/ingest/95496c05-1739-4e32-b7be-319b56b1c5b5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0f50f3'},body:JSON.stringify({sessionId:'0f50f3',location:'agent.ts:ingestCallerFinalText',message:'retail_caller_turn',data:{snippet:trimmed.slice(0,120),socialChitchat:callerSoundsLikeSocialChitchat(trimmed),sttGarble:detectLikelySttGarble(trimmed)},timestamp:Date.now(),hypothesisId:'E-clarify',runId:'post-fix'})}).catch(()=>{});
-      }
-      // #endregion
       if (session.userData.sessionFlags.awaitingAnythingElseReply) {
+        session.userData.sessionFlags.callerRespondedAfterAnythingElse = true;
+      }
+      if (
+        conversationalRetailLine &&
+        !session.userData.sessionFlags.endPhoneCallUsed &&
+        (callerWindingDownCall(trimmed) || callerSaidNothingElse(trimmed))
+      ) {
         session.userData.sessionFlags.callerRespondedAfterAnythingElse = true;
       }
       if (testCall) {
@@ -1851,8 +2019,7 @@ export default defineAgent({
           flags.demoScenarioBeat = 1;
           diag.push('info', 'demo_scenario_start', {
             slug: detected,
-            snippet: text.slice(0, 120),
-          });
+              });
         }
       }
       if (testCall) {
@@ -2058,7 +2225,7 @@ export default defineAgent({
         return;
       }
       clearGoodbyeForceTimer();
-      diag.push('info', 'demo_farewell_force_hangup', { snippet: text.slice(0, 120) });
+      diag.push('info', 'demo_farewell_force_hangup', {});
       goodbyeForceTimer = setTimeout(() => {
         goodbyeForceTimer = null;
         if (session.userData.sessionFlags.endPhoneCallUsed) return;
@@ -2076,14 +2243,14 @@ export default defineAgent({
         !conversationalRetailLine ||
         flags.endPhoneCallUsed ||
         flags.retailClosingFarewellSpoken ||
-        !flags.callerRespondedAfterAnythingElse ||
         !assistantTextSoundsLikeTerminalHangup(text)
       ) {
         return;
       }
+      if (activeGptLiveRetail) return;
       flags.retailClosingFarewellSpoken = true;
       clearGoodbyeForceTimer();
-      diag.push('info', 'retail_farewell_force_hangup', { snippet: text.slice(0, 120) });
+      diag.push('info', 'retail_farewell_force_hangup', {});
       goodbyeForceTimer = setTimeout(() => {
         goodbyeForceTimer = null;
         if (session.userData.sessionFlags.endPhoneCallUsed) return;
@@ -2093,6 +2260,38 @@ export default defineAgent({
           await disconnectCallerLeg(session, session.userData, async () => {});
         })();
       }, 700);
+    };
+
+    /**
+     * Cara decides when the call is over; once her spoken farewell has finished playing, play the
+     * hang-up clip through her audio path and drop the line. Duplex keeps agentState "speaking"
+     * for the whole call, so speech-handle playout cannot be used here.
+     */
+    const hangUpAfterGptLiveFarewell = (farewell: string) => {
+      if (session.userData.sessionFlags.endPhoneCallUsed || gptLiveHangupInFlight) return;
+      const playout = resolveGptLivePlayout();
+      if (!playout) return;
+      gptLiveHangupInFlight = true;
+      diag.push('info', 'gpt_live_farewell_hangup', {});
+      muteGptLiveCallerInput('farewell');
+      void (async () => {
+        try {
+          const outcome = await playout.waitForAssistantSpeechToFinish({
+            after: Date.now() - 3000,
+            quietMs: 900,
+            noReplyMs: 3000,
+            maxMs: 15000,
+          });
+          if (outcome === 'closed' || session.userData.sessionFlags.endPhoneCallUsed) return;
+          const clip = await loadHangupClipFrames();
+          const clipMs = await playout.playClip(clip);
+          await disconnectCallerLeg(session, session.userData, async () => {}, {
+            skipHangupTone: true,
+          });
+        } finally {
+          gptLiveHangupInFlight = false;
+        }
+      })();
     };
 
     const clearDeadAirTimers = () => {
@@ -2197,12 +2396,27 @@ export default defineAgent({
       }, deadAirMs);
     };
 
+    session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
+      if (ev.isFinal && ev.transcript) transcriptJournal.record('caller_stt_final','caller',ev.transcript);
+    });
+
     if (testCall) {
       session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
         const text = ev.transcript?.trim();
         if (!text || session.userData.sessionFlags.endPhoneCallUsed) return;
         const source = ev.isFinal ? 'stt_final' : 'stt_interim';
         armDemoCloseFromCallerText(text, source);
+      });
+    }
+
+    if (activeGptLiveRetail && conversationalRetailLine) {
+      session.on(voice.AgentSessionEventTypes.UserInputTranscribed, (ev) => {
+        const text = ev.transcript?.trim();
+        if (!text || !ev.isFinal) return;
+        console.info('[agent] gpt_live_caller_transcript');
+        diag.push('info', 'gpt_live_caller_transcript', { textLength: text.length });
+        // The matching conversation item carries the provider turn-start time;
+        // arrival time can be later than Cara's reply in full-duplex mode.
       });
     }
 
@@ -2224,6 +2438,15 @@ export default defineAgent({
       }
     });
 
+    const noteAssistantSpeechCompleted = (text: string, at: number) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      if (!activeGptLiveRetail || !gptLiveTranscriptCaptured) appendAssistantTranscriptLine(trimmed, at);
+      if (conversationalRetailLine) {
+        armRetailFarewellForceHangup(trimmed);
+      }
+    };
+
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, (ev) => {
       if (ev.newState === 'speaking') {
         clearResponseFillerTimer();
@@ -2232,7 +2455,12 @@ export default defineAgent({
         clearResponseFillerTimer();
         clearCallerReplyNudgeTimer();
         if (ev.oldState === 'speaking' && conversationStarted) {
-          flushPendingAssistantTranscript(Date.now());
+          resolveGptLivePlayout()?.flushAssistantTranscript();
+        flushPendingAssistantTranscript(Date.now());
+          if (conversationalRetailLine && !session.userData.sessionFlags.endPhoneCallUsed) {
+            const latest = getLatestAssistantChatText();
+            if (latest) armRetailFarewellForceHangup(latest);
+          }
         }
       }
       if (ev.newState === 'thinking' || ev.newState === 'speaking') {
@@ -2241,7 +2469,7 @@ export default defineAgent({
       if (ev.newState === 'speaking') {
         lastAssistantSpokeAt = Date.now();
         latencyTracker.recordFirstAudio();
-        if (thinkingStartedAt !== null) {
+        if (thinkingStartedAt !== null && !activeGptLiveRetail) {
           const replyMs = Date.now() - thinkingStartedAt;
           console.info('[agent] thinking_to_speaking_ms', replyMs);
           latencyTracker.recordReplyLatency(replyMs);
@@ -2261,6 +2489,14 @@ export default defineAgent({
         }
         thinkingStartedAt = Date.now();
       }
+      if (
+        engineerTestCall &&
+        activeGptLiveRetail &&
+        (ev.newState === 'thinking' ||
+          ev.newState === 'speaking' ||
+          (ev.newState === 'listening' && ev.oldState === 'speaking'))
+      ) {
+      }
     });
 
     session.on(voice.AgentSessionEventTypes.SpeechCreated, (ev) => {
@@ -2271,7 +2507,7 @@ export default defineAgent({
       const speechEpoch = replyTurnEpoch;
       lastAssistantSpeechHandle = ev.speechHandle;
       ev.speechHandle.addDoneCallback((sh) => {
-        if (speechEpoch !== replyTurnEpoch) {
+        if (!gptLiveDuplexHandsOff && speechEpoch !== replyTurnEpoch) {
           console.info('[agent] stale_speech_ignored', {
             speechEpoch,
             replyTurnEpoch,
@@ -2303,17 +2539,21 @@ export default defineAgent({
             return;
           }
           if (pendingLlmTtsTranscript.trim()) {
-            appendAssistantTranscriptLine(pendingLlmTtsTranscript.trim(), Date.now());
+            noteAssistantSpeechCompleted(pendingLlmTtsTranscript.trim(), Date.now());
             pendingLlmTtsTranscript = '';
             return;
           }
           // SpeechHandle text/source can be empty even when TTS played; chat ctx has the line.
           if (lastAssistantChatText.trim()) {
-            appendAssistantTranscriptLine(lastAssistantChatText.trim(), Date.now());
+            noteAssistantSpeechCompleted(lastAssistantChatText.trim(), Date.now());
             lastAssistantChatText = '';
             return;
           }
           if (flushPendingAssistantTranscript(Date.now())) {
+            if (conversationalRetailLine && !session.userData.sessionFlags.endPhoneCallUsed) {
+              const latest = getLatestAssistantChatText();
+              if (latest) armRetailFarewellForceHangup(latest);
+            }
             return;
           }
           if (lastAssistantSpokeAt > 0 && Date.now() - lastAssistantSpokeAt < 8000) {
@@ -2336,6 +2576,7 @@ export default defineAgent({
         if (lastAssistantChatText.trim()) {
           lastAssistantChatText = '';
         }
+        noteAssistantSpeechCompleted(spoken.trim(), Date.now());
       });
     });
 
@@ -2345,6 +2586,7 @@ export default defineAgent({
       if (item.type !== 'message') return;
       const { role } = item;
       if (role === 'developer' || role === 'system') return;
+      transcriptJournal.record('conversation_item', role === 'user' ? 'caller' : 'assistant', item.textContent ?? '', {id:item.id,interrupted:item.interrupted,createdAt:item.createdAt ?? ev.createdAt});
       const rawAssistantText =
         role === 'assistant' && 'rawTextContent' in item
           ? (item as { rawTextContent?: string }).rawTextContent?.trim()
@@ -2357,7 +2599,7 @@ export default defineAgent({
       }
 
       if (role === 'user') {
-        ingestCallerFinalText(text, 'caller_conversation_item', ev.createdAt);
+        ingestCallerFinalText(text, 'caller_conversation_item', item.createdAt ?? ev.createdAt);
       }
 
       if (isCallEnding()) {
@@ -2367,18 +2609,12 @@ export default defineAgent({
         const label = role === 'user' ? 'Caller' : 'Assistant';
         const interruptedNote =
           item.interrupted && (role === 'assistant' || role === 'user') ? ' [cut off]' : '';
-        appendTranscriptLine(ev.createdAt, `${label}: ${text}${interruptedNote}`);
+        if (role !== 'assistant' || !activeGptLiveRetail || !gptLiveTranscriptCaptured) appendTranscriptLine(ev.createdAt, `${label}: ${text}${interruptedNote}`);
         return;
       }
 
       const flags = session.userData.sessionFlags;
       if (role === 'assistant' && text.length > 3 && !assistantTextSoundsLikeFakeHangup(text)) {
-        // #region agent log
-        if (conversationalRetailLine && lastCallerUtterance) {
-          const callerWasSocialChitchat = callerSoundsLikeSocialChitchat(lastCallerUtterance);
-          fetch('http://127.0.0.1:7662/ingest/95496c05-1739-4e32-b7be-319b56b1c5b5',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0f50f3'},body:JSON.stringify({sessionId:'0f50f3',location:'agent.ts:ConversationItemAdded',message:'retail_assistant_reply',data:{callerSnippet:lastCallerUtterance.slice(0,120),assistantSnippet:text.slice(0,160),callerWasSocialChitchat,looksLikeClarification:assistantReplyLooksLikeClarificationRequest(text),looksLikeWellbeingMisfire:/no bother at all/i.test(text)&&!callerWasSocialChitchat},timestamp:Date.now(),hypothesisId:'E-clarify',runId:'post-fix'})}).catch(()=>{});
-        }
-        // #endregion
         if (
           conversationalRetailLine &&
           !lineMatchesGreeting(text, playbackGreetingText)
@@ -2492,7 +2728,7 @@ export default defineAgent({
         assistantAskedAnythingElse(text) &&
         text.replace(/\?/g, '').trim().length > 80
       ) {
-        diag.push('warn', 'premature_anything_else', { snippet: text.slice(0, 120) });
+        diag.push('warn', 'premature_anything_else', {});
       }
 
       if (
@@ -2570,7 +2806,7 @@ export default defineAgent({
         if (!session.userData.disclosureConfirmed) {
           void callRecordingControl.confirmFromSpokenText(text);
         }
-        appendAssistantTranscriptLine(text, ev.createdAt, item.interrupted);
+        if (!activeGptLiveRetail || !gptLiveTranscriptCaptured) appendAssistantTranscriptLine(text, ev.createdAt, item.interrupted);
       }
     });
 
@@ -2599,7 +2835,8 @@ export default defineAgent({
           }
         }
         if (call.name === 'endPhoneCall') {
-          session.userData.sessionFlags.closingCall = true;
+          // closingCall is set inside disconnectCallerLeg so farewell playout + hang-up tone
+          // can still use session.say() before the session enters closing state.
           clearAllGuardTimers();
         } else if (SLOW_TOOL_ACK_NAMES.has(call.name)) {
           scheduleResponseFillerForSlowWork();
@@ -2619,7 +2856,21 @@ export default defineAgent({
       }
     });
 
+    const maxCallMinutesRaw = Number.parseInt(process.env.CLISTE_MAX_CALL_MINUTES ?? '30', 10);
+    const maxCallMinutes = Number.isFinite(maxCallMinutesRaw)
+      ? Math.min(Math.max(maxCallMinutesRaw, 1), 120) : 30;
+    const maxCallTimer = setTimeout(() => {
+      console.warn('[agent] maximum call duration reached', { orgId: org.id, maxCallMinutes });
+      if (roomName && participant.identity) {
+        void disconnectParticipant(roomName, participant.identity).catch((error) => {
+          console.error('[agent] max duration disconnect failed', error);
+        });
+      }
+    }, maxCallMinutes * 60_000);
+    maxCallTimer.unref();
+
     session.on(voice.AgentSessionEventTypes.Close, () => {
+      clearTimeout(maxCallTimer);
       if (callLogWritten) return;
       clearAllGuardTimers();
 
@@ -2632,6 +2883,7 @@ export default defineAgent({
 
       const udSnapshot = session.userData;
       callFinalizePromise = (async () => {
+        await finishResponseTiming?.();
       let durationSeconds = 0;
       let outcome = 'answered';
       let verbatim: string | null = null;
@@ -2664,6 +2916,7 @@ export default defineAgent({
         if (Number.isFinite(transcriptFlushMs) && transcriptFlushMs > 0) {
           await new Promise((r) => setTimeout(r, Math.min(transcriptFlushMs, 2000)));
         }
+        resolveGptLivePlayout()?.flushAssistantTranscript(true);
         flushPendingAssistantTranscript(Date.now());
         const syncedFromHistory = syncAssistantTranscriptFromHistory(Date.now());
         if (syncedFromHistory > 0) {
@@ -2694,6 +2947,10 @@ export default defineAgent({
         verbatim = verbatimRaw ? redactPii(verbatimRaw) : null;
 
         const transcriptCompleteness = assessTranscriptCompleteness(verbatim);
+        if (transcriptCaptureIssues.length) {
+          transcriptCompleteness.complete = false;
+          transcriptCompleteness.reasons.push(...new Set(transcriptCaptureIssues));
+        }
         if (
           transcriptCompleteness.callerLineCount > 1 &&
           transcriptCompleteness.assistantLineCount <= 1
@@ -2723,7 +2980,7 @@ export default defineAgent({
           niche: org.niche,
         };
         const closeDiagnostics = buildCloseDiagnosticsPayload({
-          latency: latencyTracker.snapshot(),
+          latency: callLatencySnapshot(),
           ...(pipelineSnapshot ? { pipeline: pipelineSnapshot } : {}),
           sessionFlags: { ...ud.sessionFlags },
           events: diag.events(),
@@ -2731,6 +2988,7 @@ export default defineAgent({
           greetingSource,
           disclosureConfirmed,
           transcript: verbatim,
+          transcriptCompleteness,
           identifiers: diag.getIdentifiers(),
           orgSnapshot,
           configSnapshot,
@@ -2749,12 +3007,12 @@ export default defineAgent({
           transcript_review: null as string | null,
           ai_summary: aiSummary,
           disclosure_confirmed: disclosureConfirmed,
+          diagnostics: closeDiagnostics,
           ...(testCall
             ? {
                 is_test_call: true,
                 test_profile_id: testProfile?.id ?? null,
                 variant_label: testProfile?.name ?? null,
-                diagnostics: closeDiagnostics,
               }
             : {}),
           ...(engineerTestCall ? { engineer_test_call: true } : {}),
@@ -2776,13 +3034,18 @@ export default defineAgent({
             }),
           )
         ).value;
+        const transcriptJournalSaved = await transcriptJournal.close(transcriptCompleteness, callLogId ?? null);
+        const transcriptCapture = transcriptJournal.captureEvidence();
+        if (!transcriptJournalSaved) {
+          postCallTracker.record('insert', 'Raw transcript journal could not be fully persisted');
+          diag.push('error', 'transcript_journal_incomplete', {callLogId});
+        }
 
         let audioStoragePath: string | null = null;
         if (
           callLogId &&
           disclosureConfirmed &&
-          ud.callRecordingEgressId?.trim() &&
-          !engineerTestCall
+          ud.callRecordingEgressId?.trim()
         ) {
           audioStoragePath = await finalizeCallRecording({
             egressId: ud.callRecordingEgressId,
@@ -2964,9 +3227,11 @@ export default defineAgent({
           }
         }
 
-        if (testCall && callLogId && voiceWebhooksConfigured() && persistCalledNumber) {
+        // Every completed call supplies final evidence for independent quality
+        // review, after transcript enrichment and action outcomes are saved.
+        if (callLogId && voiceWebhooksConfigured() && persistCalledNumber) {
           const finalDiagnostics = buildCloseDiagnosticsPayload({
-            latency: latencyTracker.snapshot(),
+            latency: callLatencySnapshot(),
             ...(pipelineSnapshot ? { pipeline: pipelineSnapshot } : {}),
             sessionFlags: { ...ud.sessionFlags },
             events: diag.events(),
@@ -2974,6 +3239,8 @@ export default defineAgent({
             greetingSource,
             disclosureConfirmed,
             transcript: verbatim,
+            transcriptCompleteness,
+            ...(transcriptCapture ? { transcriptCapture } : {}),
             identifiers: diag.getIdentifiers(),
             orgSnapshot,
             configSnapshot,
@@ -2994,7 +3261,8 @@ export default defineAgent({
             transcript_review: transcriptReview,
             ai_summary: aiSummary,
             disclosure_confirmed: disclosureConfirmed,
-            is_test_call: true,
+            is_test_call: testCall,
+            engineer_test_call: engineerTestCall,
             test_profile_id: testProfile?.id ?? null,
             variant_label: testProfile?.name ?? null,
             diagnostics: finalDiagnostics,
@@ -3004,7 +3272,7 @@ export default defineAgent({
             ...(audioStoragePath ? { audio_storage_path: audioStoragePath } : {}),
           });
           if (!enrichResult.ok) {
-            console.warn('[agent] test-call diagnostics enrichment webhook failed', {
+            console.warn('[agent] final-call diagnostics enrichment webhook failed', {
               error: enrichResult.error,
               callLogId,
             });
@@ -3124,6 +3392,9 @@ export default defineAgent({
         text: ReadableStream<string>,
         modelSettings: Parameters<voice.Agent<CaraAgentUserData>['ttsNode']>[1],
       ) {
+        if (activeGptLiveRetail) {
+          return voice.Agent.default.ttsNode(this, text, modelSettings);
+        }
         const preparedSpeechNext =
           this.session.userData.preparedSpeechSingleUtteranceNext === true;
         const singleUtterance = this.singleUtteranceTtsNext || preparedSpeechNext;
@@ -3179,11 +3450,79 @@ export default defineAgent({
         vertical: orgVertical,
         demoLine: testCall,
         conversationalRetailLine,
+        gptLive: activeGptLiveRetail,
       }),
     });
-
-    await session.start({ agent, room: ctx.room });
+    caraVoiceAgentRef = agent;
     const callerIdentity = participant.identity;
+
+    if (activeGptLiveRetail) {
+      const onCallerAudioTrack = (
+        track: RemoteTrack,
+        _pub: unknown,
+        trackParticipant: RemoteParticipant,
+      ) => {
+        if (trackParticipant.identity !== callerIdentity) return;
+        if (track.kind !== TrackKind.KIND_AUDIO) return;
+        ensureGptLiveCallerInputOpen('caller_audio_track', { force: true });
+      };
+      ctx.room.on(RoomEvent.TrackSubscribed, onCallerAudioTrack);
+    }
+
+
+    await session.start({
+      agent,
+      room: ctx.room,
+      ...(activeGptLiveRetail
+        ? {
+            outputOptions: {
+              syncTranscription: false,
+              transcriptionEnabled: false,
+              queueSizeMs: gptLiveAudioQueueMs,
+              // Keep continuous PCM out of Opus comfort-noise mode between spoken phrases.
+              // Preserve packet-loss redundancy while testing the silence-transition artifacts.
+              audioPublishOptions: new TrackPublishOptions({
+                source: TrackSource.SOURCE_MICROPHONE,
+                dtx: false,
+                red: true,
+              }),
+            },
+            record: { audio: false, traces: true, logs: true, transcript: true },
+          }
+        : {}),
+    });
+
+    if (activeGptLiveRetail) {
+      const measuredSession = resolveGptLivePlayout();
+      if (measuredSession && !textRehearsalMode) {
+        measuredSession.enableResponseTiming(ctx.proc.userData.vad as silero.VAD);
+        // Retain the session reference after AgentSession begins shutting down.
+        responseTimingSnapshot = () => measuredSession.responseTimingSnapshot();
+        finishResponseTiming = () => measuredSession.finishResponseTiming();
+      }
+      resolveGptLivePlayout()?.onTranscriptEvent(event => {
+        const isText = event.source === 'gpt_live_transcript_delta';
+        if (isText) gptLiveTranscriptCaptured = true;
+        else transcriptCaptureIssues.push('GPT-Live connection interrupted; transcript continuity needs review');
+        transcriptJournal.record(event.source, isText ? 'assistant' : 'system', event.text, {...event.metadata,at:event.at});
+      });
+      resolveGptLivePlayout()?.onAssistantSegment(event => {
+        appendAssistantTranscriptLine(event.text, event.at, event.interrupted);
+      });
+      resolveGptLivePlayout()?.onAssistantUtterance((utterance) => {
+        if (!conversationStarted) return;
+        if (gptLiveUtteranceEndsWithFarewell(utterance)) hangUpAfterGptLiveFarewell(utterance);
+      });
+      for (const pub of participant.trackPublications.values()) {
+        if (pub.kind === TrackKind.KIND_AUDIO) {
+          if (pub.track) {
+            ensureGptLiveCallerInputOpen('caller_audio_existing', { force: true });
+            break;
+          }
+        }
+      }
+    }
+
     if (textRehearsalMode) {
       ctx.room.on(RoomEvent.DataReceived, (payload, from, _kind, topic) => {
         if (topic !== TEXT_REHEARSAL_TOPIC) return;
@@ -3232,16 +3571,32 @@ export default defineAgent({
     console.info('[ai-disclosure] resolved at boot', {
       disabled: aiDisclosure.disabled,
       source: aiDisclosure.source,
-      textPreview: aiDisclosure.text ? `${aiDisclosure.text.slice(0, 36)}…` : '',
       textLength: aiDisclosure.text.length,
     });
 
     const speakOptionalAiDisclosure = async (): Promise<void> => {
       if (session.userData.disclosureConfirmed) return;
       if (aiDisclosure.disabled || !aiDisclosure.text.trim()) return;
+      if (activeGptLiveRetail) {
+        const handle = session.generateReply({
+          instructions: buildGptLiveRetailOpeningInstructions(aiDisclosure.text),
+        });
+        try {
+          await waitForSpeechHandlePlayout(handle);
+          if (handle.interrupted) return;
+          if (greetingDisclosesAi(aiDisclosure.text)) {
+            session.userData.disclosureConfirmed = true;
+            await callRecordingControl.tryStart();
+          }
+        } catch (error) {
+          console.warn('[agent] gpt_live disclosure playout failed', error);
+        }
+        return;
+      }
       const handle = sayPrepared(session, aiDisclosure.text, { allowInterruptions: true });
       try {
         await waitForSpeechHandlePlayout(handle);
+        if (handle.interrupted) return;
         if (greetingDisclosesAi(aiDisclosure.text)) {
           session.userData.disclosureConfirmed = true;
           await callRecordingControl.tryStart();
@@ -3252,7 +3607,8 @@ export default defineAgent({
     };
 
     callRecordingControl.tryStart = async (): Promise<void> => {
-      if (engineerTestCall) return;
+      // Engineer audio tests need the same evidence fallback as ordinary calls.
+      if (textRehearsalMode) return;
       if (session.userData.callRecordingEgressId || !session.userData.disclosureConfirmed) {
         return;
       }
@@ -3273,15 +3629,29 @@ export default defineAgent({
         : spokenTextIncludesLegalDisclosure(text);
       if (!qualifies) return;
       try {
-        await waitForAgentSpeechPlayout(session, lastAssistantSpeechHandle);
-      } catch {
-        /* best-effort playout wait */
+        if (activeGptLiveRetail) {
+          const playout = resolveGptLivePlayout();
+          if (!playout) return;
+          const outcome = await playout.waitForAssistantSpeechToFinish({
+            after: Date.now() - 3000,
+            quietMs: 800,
+            noReplyMs: 3000,
+            maxMs: 15000,
+          });
+          if (outcome !== 'finished') return;
+        } else {
+          await waitForAgentSpeechPlayout(session, lastAssistantSpeechHandle);
+          if (session.agentState === 'speaking') return;
+        }
+        if (lastAssistantSpeechHandle?.interrupted) return;
+      } catch (error) {
+        console.warn('[agent] disclosure playout failed; recording not started', error);
+        return;
       }
-      if (session.userData.disclosureConfirmed) return;
+      if (!callerStillConnected() || session.userData.disclosureConfirmed) return;
       session.userData.disclosureConfirmed = true;
       console.info('[agent] disclosure_confirmed_after_playout', {
         demoLine: testCall,
-        snippet: text.slice(0, 120),
       });
       await callRecordingControl.tryStart();
     };
@@ -3309,32 +3679,39 @@ export default defineAgent({
         const greetingIncludesDisclosure = greetingDisclosesAi(playbackGreetingText);
         try {
           if (activeGptLiveRetail) {
-            const handle = session.generateReply({
-              instructions: buildGptLiveRetailOpeningInstructions(playbackGreetingText),
-            });
-            if (greetingIncludesDisclosure) {
-              session.userData.disclosureConfirmed = true;
-              void callRecordingControl.tryStart();
-              console.info('[agent] recording_start_at_greeting', {
-                msSinceCallStart: Date.now() - callStartedAt,
+            latencyTracker.recordGreetingPlayback();
+            if (verifiedGptLiveOpening) {
+              const playout = resolveGptLivePlayout();
+              if (!playout) throw new Error('Verified opening playout is unavailable');
+              console.info('[agent] gpt_live_verified_opening_start', {
+                durationMs: verifiedGptLiveOpening.durationMs,
+              });
+              await playout.playVerifiedOpening();
+              if (!callerStillConnected() || isCallEnding()) return;
+              console.info('[agent] gpt_live_verified_opening_complete');
+            } else {
+              session.generateReply({
+                instructions: buildGptLiveRetailOpeningInstructions(playbackGreetingText),
               });
             }
+            // The verified opening has completed playout. The streaming opening is
+            // confirmed later by confirmFromSpokenText after speech finishes.
+            if (greetingIncludesDisclosure && verifiedGptLiveOpening) {
+              session.userData.disclosureConfirmed = true;
+              await callRecordingControl.tryStart();
+            }
             greetingPlayedFlag = true;
-            greetingSource = 'gpt_live';
-            latencyTracker.recordGreetingPlayback();
+            greetingSource = verifiedGptLiveOpening ? 'cached_pcm' : 'gpt_live';
             console.info('[agent] greeting_playback', {
-              source: 'gpt_live',
+              source: greetingSource,
               msSinceCallStart: Date.now() - callStartedAt,
             });
             diag.push('info', 'greeting_playback', {
-              source: 'gpt_live',
+              source: greetingSource,
               msSinceCallStart: Date.now() - callStartedAt,
             });
-            try {
-              await waitForSpeechHandlePlayout(handle);
-            } catch {
-              /* playout wait best-effort */
-            }
+            // Duplex speech handles stay open the whole call — do not wait on them or mute the caller.
+            settleGreetingPhase('greeting_completed');
             greetingPlayoutComplete = true;
             if (!greetingIncludesDisclosure) {
               await speakOptionalAiDisclosure();
@@ -3348,13 +3725,6 @@ export default defineAgent({
               addToChatCtx: false,
               allowInterruptions: demoExperienceStack,
             });
-            if (greetingIncludesDisclosure) {
-              session.userData.disclosureConfirmed = true;
-              void callRecordingControl.tryStart();
-              console.info('[agent] recording_start_at_greeting', {
-                msSinceCallStart: Date.now() - callStartedAt,
-              });
-            }
             greetingPlayedFlag = true;
             greetingSource = 'live_tts';
             latencyTracker.recordGreetingPlayback();
@@ -3368,8 +3738,13 @@ export default defineAgent({
             });
             try {
               await waitForSpeechHandlePlayout(handle);
-            } catch {
-              /* playout wait best-effort */
+              if (handle.interrupted) throw new Error('Greeting was interrupted');
+              if (greetingIncludesDisclosure && callerStillConnected()) {
+                session.userData.disclosureConfirmed = true;
+                await callRecordingControl.tryStart();
+              }
+            } catch (error) {
+              console.warn('[agent] greeting playout failed; recording not started', error);
             }
             greetingPlayoutComplete = true;
             if (!greetingIncludesDisclosure) {
@@ -3380,6 +3755,10 @@ export default defineAgent({
           const msg = e instanceof Error ? e.message : String(e);
           if (!msg.includes('not running')) {
             console.error('[agent] live greeting play failed', e);
+          }
+          if (verifiedGptLiveOpening) {
+            await disconnectCallerLeg(session, session.userData, async () => {});
+            return;
           }
           if (textRehearsalMode && !textRehearsalReadySent) {
             void sendTextRehearsalReady(playbackGreetingText.trim() || null);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { CaraTools } from './cara_tools.js';
+import { CaraTools, type CaraAgentUserData } from './cara_tools.js';
 
 describe('CaraTools.toolContext', () => {
   it('exposes retail lookup tools on conversational retail 9508', () => {
@@ -10,6 +10,11 @@ describe('CaraTools.toolContext', () => {
       'endPhoneCall',
       'searchSuperValuProducts',
     ]);
+  });
+
+  it('leaves hang-up to the spoken farewell on GPT-Live retail', () => {
+    const tools = new CaraTools().toolContext({ conversationalRetailLine: true, gptLive: true });
+    assert.deepEqual(Object.keys(tools), ['searchSuperValuProducts']);
   });
 
   it('exposes only endPhoneCall on demo line', () => {
@@ -22,5 +27,249 @@ describe('CaraTools.toolContext', () => {
     assert.ok('takeCallbackMessage' in tools);
     assert.ok('sendDirectionsLink' in tools);
     assert.ok('endPhoneCall' in tools);
+  });
+});
+
+// Exercise the real tool wrapper through its HTTP boundary, with no live service calls.
+describe('CaraTools current-offer lookup', () => {
+  async function lookup(
+    query: string,
+    response: Record<string, unknown>,
+    replies: Record<string, unknown>[] = [],
+    followUp?: string,
+  ) {
+    const requests: Array<Record<string, unknown>> = [];
+    const previousFetch = globalThis.fetch;
+    const previousUrl = process.env.CLISTE_APP_URL;
+    const previousSecret = process.env.CLISTE_VOICE_WEBHOOK_SECRET;
+    process.env.CLISTE_APP_URL = 'https://catalogue.invalid';
+    process.env.CLISTE_VOICE_WEBHOOK_SECRET = 'test-secret';
+    globalThis.fetch = async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify(replies[requests.length - 1] ?? response), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    try {
+      const tool = new CaraTools().searchSuperValuProducts;
+      const context = {
+        ctx: {
+          userData: {
+            organizationId: 'test-org',
+            calledNumber: 'test-line',
+            sessionFlags: {},
+          },
+          session: { currentAgent: {} },
+        },
+      } as unknown as Parameters<typeof tool.execute>[1];
+      let result = await tool.execute({ query }, context) as {
+        ok: boolean;
+        message: string;
+        matches?: Array<{ product_name: string }>;
+      };
+      if (followUp) result = await tool.execute({query:followUp}, context) as typeof result;
+      return { requests, result };
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousUrl === undefined) delete process.env.CLISTE_APP_URL;
+      else process.env.CLISTE_APP_URL = previousUrl;
+      if (previousSecret === undefined) delete process.env.CLISTE_VOICE_WEBHOOK_SECRET;
+      else process.env.CLISTE_VOICE_WEBHOOK_SECRET = previousSecret;
+    }
+  }
+
+  it('uses the caller preference after a broad question instead of looping', async () => {
+    const {requests,result}=await lookup('alcohol offers',{ok:true,matches:[{product_name:'Lager',score:1,quote_text:'Lager four pack for eight euro.'}]},[],'lager');
+    assert.equal(requests.length,1);
+    assert.equal(requests[0]?.query,'alcohol offers lager');
+    assert.match(result.message,/Lager four pack/);
+  });
+  it('retains a known counter choice while narrowing the product', async () => {
+    const {requests}=await lookup('meat counter offers',{ok:true,matches:[{product_name:'Chicken',score:1,quote_text:'Chicken.'}]},[],'chicken');
+    assert.equal(requests[0]?.query,'meat counter offers chicken');
+    assert.equal(requests[0]?.fulfilment,'counter');
+    assert.equal(requests[0]?.service_area,'butcher');
+  });
+
+  it('allows a clear switch of department during clarification', async () => {
+    const {requests}=await lookup('alcohol offers',{ok:true,matches:[{product_name:'Milk',score:1,quote_text:'Milk.'}]},[],'dairy section milk');
+    assert.equal(requests[0]?.query,'dairy section milk');
+    assert.equal(requests[0]?.service_area,'dairy');
+  });
+
+  it('returns clarification without fetching products for every broad department', async () => {
+    for (const query of ['alcohol offers','bakery offers','dairy offers','deli offers','meat counter offers','fish offers','produce offers','frozen offers','household offers','baby offers','pet offers','health and beauty offers','any offers']) {
+      const {requests,result}=await lookup(query,{ok:true,matches:[{product_name:'Should never be suggested'}]});
+      assert.equal(requests.length,0,query);
+      assert.deepEqual(result.matches,[],query);
+      assert.match(result.message,/what kind of product/);
+    }
+  });
+
+  it('honours an explicit request for a few examples without another clarification', async () => {
+    const { requests, result } = await lookup('a few examples of meat offers', {
+      ok: true,
+      matches: [{ product_name: 'Chicken fillets', department: 'Meat', sku: 'test', score: 1, quote_text: 'Chicken fillets, any three packs for ten euro.', is_on_offer: true }],
+    });
+    assert.deepEqual(requests, [{ called_number: 'test-line', query: 'a few examples of meat offers', intent: 'offer', service_area: 'butcher' }]);
+    assert.match(result.message, /any three packs for ten euro/);
+    assert.match(result.message, /quantity and total bundle price/);
+  });
+
+  it('preserves the explicit counter request from the failed call', async () => {
+    const query = 'chicken offers in the meat counter this week';
+    const { requests } = await lookup(query, { ok: true, matches: [], no_match_quote: 'No confirmed counter offer found.' });
+    assert.deepEqual(requests, [{ called_number: 'test-line', query, intent: 'offer', service_area: 'butcher', fulfilment: 'counter' }]);
+  });
+
+  it('never removes campaign or department filters through token fallback', async () => {
+    for (const query of ['3 for 10 chicken', 'Super 7', 'multibuys', 'household laundry offers', 'weekly chocolate offers']) {
+      const { requests, result } = await lookup(query, { ok: true, matches: [], no_match_quote: 'No matching current offer in that selection.' });
+      assert.equal(requests.length, 1, query);
+      assert.equal(requests[0]?.query, query);
+      assert.equal(requests[0]?.intent, 'offer');
+      assert.ok(result.message.endsWith('No matching current offer in that selection.'));
+      assert.match(result.message, /not a script/);
+      assert.match(result.message, /one brief/);
+    }
+  });
+
+  it('keeps a partial freshness warning scoped to the source reported by the backend', async () => {
+    const { result } = await lookup('dairy cheese offers', {
+      ok: true,
+      matches: [],
+      offers_freshness: 'The dairy offer feed has not refreshed today.',
+      no_match_quote: 'No current dairy offers could be confirmed.',
+    });
+    assert.match(result.message, /dairy offer feed has not refreshed today/);
+    assert.match(result.message, /No current dairy offers could be confirmed/);
+    assert.doesNotMatch(result.message, /weekly offer sheet has finished|cannot confirm the meat counter/);
+  });
+
+  it('still recovers a specific misheard product without losing offer intent', async () => {
+    const match = { product_name: 'Irish Fillet Steak', department: 'Meat', sku: 'fillet', score: 1, quote_text: 'Fillet steak is on offer for ten euro.', is_on_offer: true };
+    const { requests, result } = await lookup('filled steak on offer', { ok: true, matches: [match] }, [{ ok: true, matches: [] }]);
+    assert.ok(requests.length > 1);
+    assert.ok(requests.every((request) => request.intent === 'offer'));
+    assert.equal(result.matches?.[0]?.product_name, 'Irish Fillet Steak');
+  });
+});
+
+
+describe('caller delivery security boundaries', () => {
+  async function withDeliveryFixture(run: (fixture: {
+    tools: CaraTools;
+    userData: CaraAgentUserData;
+    context: Parameters<CaraTools['sendDirectionsLink']['execute']>[1];
+    requests: Array<Record<string, unknown>>;
+    failNextDelivery: () => void;
+  }) => Promise<void>) {
+    const previousFetch = globalThis.fetch;
+    const envKeys = ['CLISTE_APP_URL', 'CLISTE_VOICE_WEBHOOK_SECRET', 'CARA_SMS_DRY_RUN'] as const;
+    const originals = envKeys.map((key) => [key, process.env[key]] as const);
+    process.env.CLISTE_APP_URL = 'https://delivery-test.invalid';
+    process.env.CLISTE_VOICE_WEBHOOK_SECRET = 'synthetic-delivery-test';
+    process.env.CARA_SMS_DRY_RUN = 'true';
+    const requests: Array<Record<string, unknown>> = [];
+    let failNext = false;
+    globalThis.fetch = async (_url, init) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const failed = failNext;
+      failNext = false;
+      return new Response(JSON.stringify(failed ? { ok: false, error: 'delivery unavailable' } : { ok: true }), {
+        status: failed ? 503 : 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const tools = new CaraTools();
+    const userData: CaraAgentUserData = {
+      organizationId: '00000000-0000-4000-8000-000000000001',
+      businessName: 'Test business',
+      calledNumber: '+35315550100',
+      callerPhone: '+353871234567',
+      routingLinks: [
+        { id: 'location', presetId: 'location', label: 'Directions', intent: 'directions', targetType: 'link', url: 'https://example.com/location', active: true, linkDelivery: 'both' },
+        { id: 'website', label: 'Website', intent: 'website', targetType: 'link', url: 'https://example.com', active: true },
+      ],
+      businessFiles: [],
+      fallbackNumber: null,
+      callRoutingMode: null,
+      disclosureConfirmed: true,
+      endCallTarget: { roomName: 'sip-test-server-room', callerIdentity: 'sip-test-caller' },
+      sessionFlags: {
+        linkSent: false, actionTicketCreated: false, callbackRequested: false,
+        smsSent: 0, endPhoneCallUsed: false, askedAnythingElse: false,
+        awaitingAnythingElseReply: false, anythingElseAskCount: 0,
+        callerRespondedAfterAnythingElse: false, closingCall: false, likelySttGarble: false,
+      },
+    };
+    const context = { ctx: { userData } } as Parameters<typeof tools.sendDirectionsLink.execute>[1];
+    try {
+      await run({ tools, userData, context, requests, failNextDelivery: () => { failNext = true; } });
+    } finally {
+      globalThis.fetch = previousFetch;
+      for (const [key, value] of originals) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  const emailArgs = (emailAddress = 'recipient@example.com') => ({
+    routeId: 'location', channel: 'email' as const, emailAddress, callerConsented: true,
+  });
+
+  it('blocks repeated and simultaneous duplicate emails using normalized recipients', async () => {
+    await withDeliveryFixture(async ({ tools, context, requests }) => {
+      const outcomes = await Promise.all([
+        tools.sendDirectionsLink.execute(emailArgs('RECIPIENT@example.com'), context),
+        tools.sendDirectionsLink.execute(emailArgs(), context),
+      ]);
+      const repeat = await tools.sendDirectionsLink.execute(emailArgs(), context);
+      assert.equal(outcomes.filter((outcome) => outcome.ok).length, 1);
+      assert.equal(repeat.ok, false);
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0]?.call_session_id, 'sip-test-server-room');
+      assert.equal(requests[0]?.to, 'recipient@example.com');
+    });
+  });
+
+  it('limits concurrent distinct recipients to three messages per call', async () => {
+    await withDeliveryFixture(async ({ tools, context, requests }) => {
+      const outcomes = await Promise.all(Array.from({ length: 10 }, (_, index) =>
+        tools.sendDirectionsLink.execute(emailArgs(`recipient-${index}@example.com`), context)));
+      assert.equal(outcomes.filter((outcome) => outcome.ok).length, 3);
+      assert.equal(requests.length, 3);
+    });
+  });
+
+  it('shares the message allowance between email and SMS', async () => {
+    await withDeliveryFixture(async ({ tools, context, requests }) => {
+      assert.equal((await tools.sendDirectionsLink.execute(emailArgs(), context)).ok, true);
+      assert.equal((await tools.sendDirectionsLink.execute(emailArgs('second@example.com'), context)).ok, true);
+      assert.equal((await tools.sendRoutingLink.execute({ routeId: 'website' }, context)).ok, true);
+      assert.equal((await tools.sendDirectionsLink.execute(emailArgs('third@example.com'), context)).ok, false);
+      assert.equal(requests.length, 2);
+    });
+  });
+
+  it('requires caller consent and a server-bound call session before any email request', async () => {
+    await withDeliveryFixture(async ({ tools, context, userData, requests }) => {
+      assert.equal((await tools.sendDirectionsLink.execute({ ...emailArgs(), callerConsented: false }, context)).ok, false);
+      delete userData.endCallTarget;
+      assert.equal((await tools.sendDirectionsLink.execute(emailArgs(), context)).ok, false);
+      assert.equal(requests.length, 0);
+    });
+  });
+
+  it('allows a failed request to retry with the same durable call identity', async () => {
+    await withDeliveryFixture(async ({ tools, context, requests, failNextDelivery }) => {
+      failNextDelivery();
+      assert.equal((await tools.sendDirectionsLink.execute(emailArgs(), context)).ok, false);
+      assert.equal((await tools.sendDirectionsLink.execute(emailArgs(), context)).ok, true);
+      assert.equal(requests.length, 2);
+      assert.deepEqual(requests[0], requests[1]);
+    });
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Tolerant parse of organizations.routing_links — mirrors code-base-1 shape.
+ * Tolerant parse of organizations.routing_links — mirrors cara-platform shape.
  */
 
 export type RoutingTargetType =
@@ -98,7 +98,7 @@ export function parseRoutingLinks(raw: unknown): RoutingLink[] {
   return out;
 }
 
-export function isFallbackRoute(link: RoutingLink): boolean {
+function isFallbackRoute(link: RoutingLink): boolean {
   const key = (link.intent || link.label).trim().toLowerCase();
   return key === 'anything else' || key === 'fallback';
 }
@@ -149,7 +149,7 @@ function normalizeRouteKey(value: string): string {
     .trim();
 }
 
-export function routeToolForPrompt(link: RoutingLink): string {
+function routeToolForPrompt(link: RoutingLink): string {
   if (routeUsesCallerLinkDelivery(link)) {
     return 'sendDirectionsLink';
   }
@@ -171,7 +171,7 @@ export function routeToolForPrompt(link: RoutingLink): string {
   }
 }
 
-export function routeIntakeHint(link: RoutingLink): string | null {
+function routeIntakeHint(link: RoutingLink): string | null {
   const url = link.url.trim();
   const description = link.description?.trim() ?? '';
   const isCallbackLike =

@@ -6,13 +6,13 @@ Run the **full Cara worker path** (compiled prompt → LLM → tools → agent s
 
 1. LiveKit credentials in `.env` (`LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`).
 2. For **local dev**, set `LIVEKIT_AGENT_NAME=cliste-voice-local` in **both** cb1 `.env.local` and cb2 `.env` so production (`cliste-retail-node`) does not steal dispatches.
-3. Local dev stack — from **cliste-code-base-1**:
+3. Local dev stack — from **cara-platform**:
 
 ```bash
 npm run dev:text-rehearsal
 ```
 
-That starts the admin dashboard on `:3001` and the voice worker in **cliste-code-base-2**. Or run `npm run dev` in cb2 alone if the dashboard is already up.
+That starts the admin dashboard on `:3001` and the voice worker in **cara-voice-platform**. Or run `npm run dev` in cb2 alone if the dashboard is already up.
 
 Production workers need `CARA_TEXT_REHEARSAL=1` (never set in production unless you intend text rehearsal there). Local `text-rehearsal-*` rooms auto-enable the text path without that flag.
 

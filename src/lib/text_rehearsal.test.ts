@@ -69,10 +69,10 @@ describe('text_rehearsal', () => {
     let assistant = '';
     let listening = false;
     let done = false;
-    const callbacks: Array<() => void> = [];
+    const callbacks: Array<(sh: unknown) => void> = [];
     const handle = {
       done: () => done,
-      addDoneCallback: (cb: () => void) => {
+      addDoneCallback: (cb: (sh: unknown) => void) => {
         callbacks.push(cb);
       },
     };
@@ -96,7 +96,7 @@ describe('text_rehearsal', () => {
 
     assistant = 'At the butcher counter this week...';
     done = true;
-    for (const cb of callbacks) cb();
+    for (const cb of callbacks) cb(handle);
     await wait;
     assert.equal(resolved, true);
   });

@@ -79,3 +79,29 @@ describe('retail product query fuzzy recovery', () => {
     ]);
   });
 });
+
+
+describe('department offer scope', () => {
+  it('maps offer departments without inventing counter fulfilment', () => {
+    for (const [query, area] of [
+      ['meat offers', 'butcher'], ['fish offers', 'fish'], ['deli offers', 'deli'],
+      ['dairy offers', 'dairy'], ['any offers in dairy', 'dairy'], ['bakery offers', 'bakery'],
+      ['produce offers', 'produce'], ['beer offers', 'off_licence'],
+    ]) {
+      assert.equal(inferExplicitProductServiceArea(query!), area, query);
+      assert.equal(inferExplicitProductFulfilment(query!), undefined, query);
+    }
+  });
+
+  it('keeps broad and unlisted departments in the query', () => {
+    for (const query of ['weekly offers', 'frozen offers', 'household offers', 'pet food offers', 'meat offers and dairy offers', 'any meat and dairy offers', 'offers apart from meat', 'red wine sauce']) {
+      assert.equal(inferExplicitProductServiceArea(query), undefined, query);
+    }
+  });
+
+  it('retains the explicit counter scope from the failed meat-offers call', () => {
+    const query = 'is there any meat offers in the meat counter this week';
+    assert.equal(inferExplicitProductServiceArea(query), 'butcher');
+    assert.equal(inferExplicitProductFulfilment(query), 'counter');
+  });
+});

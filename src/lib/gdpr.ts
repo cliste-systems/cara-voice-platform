@@ -48,7 +48,7 @@ export function redactPii(input: string | null | undefined): string {
   // 1. Long digit runs (likely card numbers / IBANs). Allow spaces, dashes, dots
   //    between digits. Min 13 digits — phones are usually 10–12 with a +.
   s = s.replace(
-    /(?<![+\w])(?:\d[\s\-.]?){13,19}\d(?![\w])/g,
+    /(?<![+\w])\d(?:[\s\-.]?\d){12,18}(?![\w])/g,
     REDACTED,
   );
 
@@ -69,7 +69,7 @@ export function redactPii(input: string | null | undefined): string {
   const numberWord =
     '(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)';
   s = s.replace(
-    new RegExp(`(?:${numberWord}\\s+){8,}${numberWord}`, 'gi'),
+    new RegExp(`\\b${numberWord}(?:\\s+${numberWord}){7,}\\b`, 'gi'),
     REDACTED,
   );
 
@@ -77,7 +77,7 @@ export function redactPii(input: string | null | undefined): string {
   s = s.replace(/\b\d{7}[A-Za-z]{1,2}\b/g, REDACTED);
 
   // 6. IBAN-ish: 2 letters + 2 check digits + up to 30 alphanum (compact form).
-  s = s.replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b/g, REDACTED);
+  s = s.replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b/gi, REDACTED);
 
   return s;
 }

@@ -1,4 +1,4 @@
-export const CALL_ROUTING_MODES = [
+const CALL_ROUTING_MODES = [
   'cliste_number',
   'forward_all',
   'forward_missed',

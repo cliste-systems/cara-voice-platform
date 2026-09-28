@@ -28,7 +28,7 @@ async function cf(method: string, path: string, body?: unknown): Promise<void> {
       Authorization: `Bearer ${TOKEN}`,
       'Content-Type': 'application/json',
     },
-    body: body ? JSON.stringify(body) : undefined,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const json = (await res.json()) as {
     success: boolean;
@@ -81,8 +81,8 @@ async function testR2Upload(accessKeyId: string, secretAccessKey: string): Promi
   );
   console.log('✓ R2 S3 upload test passed');
   console.log('\nSet on LiveKit agent (lk agent update-secrets):');
-  console.log(`CALL_RECORDING_EGRESS_S3_ACCESS_KEY=${accessKeyId}`);
-  console.log(`CALL_RECORDING_EGRESS_S3_SECRET_KEY=${secretAccessKey}`);
+  console.log("CALL_RECORDING_EGRESS_S3_ACCESS_KEY=<set securely>");
+  console.log("CALL_RECORDING_EGRESS_S3_SECRET_KEY=<set securely>");
   console.log(`CALL_RECORDING_EGRESS_S3_BUCKET=${BUCKET}`);
   console.log(`CALL_RECORDING_EGRESS_S3_ENDPOINT=${endpoint}`);
   console.log('CALL_RECORDING_EGRESS_S3_REGION=auto');

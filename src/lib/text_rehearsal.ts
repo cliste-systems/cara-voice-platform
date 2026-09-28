@@ -3,9 +3,9 @@ import { assistantReplyLooksLikeClarificationRequest } from './stt_garble.js';
 /** LiveKit data topic — must match CLI and admin UI. */
 export const TEXT_REHEARSAL_TOPIC = 'cara_text_rehearsal';
 
-export const TEXT_REHEARSAL_ROOM_PREFIX = 'text-rehearsal-';
+const TEXT_REHEARSAL_ROOM_PREFIX = 'text-rehearsal-';
 
-export const TEXT_REHEARSAL_METADATA_SOURCE = 'text_rehearsal';
+const TEXT_REHEARSAL_METADATA_SOURCE = 'text_rehearsal';
 
 export type TextRehearsalInboundPacket =
   | { type: 'caller_turn'; text: string; turnId: string; skipGreeting?: boolean }
@@ -125,7 +125,7 @@ export function buildTextRehearsalDispatchMetadata(input: {
   });
 }
 
-export function parseTextRehearsalSkipGreeting(metadata: string | null | undefined): boolean {
+function parseTextRehearsalSkipGreeting(metadata: string | null | undefined): boolean {
   if (!metadata?.trim()) return false;
   try {
     const parsed = JSON.parse(metadata) as Record<string, unknown>;
@@ -160,7 +160,7 @@ export function parseTextRehearsalToolOutput(raw: unknown): { ok: boolean; messa
 }
 
 /** Wait for LLM/tool pipeline — not TTS playout (text rehearsal must not block on audio). */
-export function waitForReplyPipelineDone(
+function waitForReplyPipelineDone(
   handle: ReplyPipelineHandle,
   timeoutMs: number,
 ): Promise<void> {
@@ -246,7 +246,7 @@ export function assistantReplyLooksLikeRetailFulfilmentClarification(text: strin
   return /\b(counter|pre-?pack|aisle|butcher|fresh|per kilo|kilo)\b/i.test(t);
 }
 
-export function inferAssistantFulfilment(text: string): 'counter' | 'prepack' | null {
+function inferAssistantFulfilment(text: string): 'counter' | 'prepack' | null {
   const t = text.toLowerCase();
   const counter =
     /\bper kilo\b|\bfresh counter\b|\bbutcher counter\b|\bcounter price\b|\bat the counter\b/.test(
