@@ -1597,6 +1597,17 @@ export default defineAgent({
               : String(err);
       console.error('[AgentSession] pipeline error', msg, err);
       const stage = classifyPipelineErrorStage(msg);
+      if (isCallEnding()) {
+        console.warn('[AgentSession] pipeline error after call close', {
+          stage,
+          message: msg.slice(0, 160),
+        });
+        diag.push('warn', `pipeline_${stage}_error_after_close`, {
+          message: msg,
+          stage,
+        });
+        return;
+      }
       diag.push('error', `pipeline_${stage}_error`, { message: msg, stage });
       if (stage === 'stt') {
         sttFailureDetected = true;
@@ -2317,6 +2328,12 @@ export default defineAgent({
             return;
           }
           if (lastAssistantSpokeAt > 0 && Date.now() - lastAssistantSpokeAt < 8000) {
+            return;
+          }
+          if (isCallEnding()) {
+            diag.push('info', 'empty_speech_handle_after_close', {
+              callerSnippet: lastCallerUtterance.slice(0, 120),
+            });
             return;
           }
           console.warn('[agent] empty_speech_handle', {
