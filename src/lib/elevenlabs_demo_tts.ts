@@ -2,7 +2,7 @@ import { AudioByteStream, tokenize, tts, type APIConnectOptions } from '@livekit
 import type { AudioFrame } from '@livekit/rtc-node';
 import { WebSocket } from 'ws';
 
-export const ELEVEN_DEMO_VOICE = 'ehKZw5kruBt73Gytae2x';
+export const ELEVEN_DEMO_VOICE = '0VXT7iQ2kXG7EERbbG9T';
 export const ELEVEN_DEMO_MODEL = 'eleven_v4_turbo';
 
 /** Server-dispatched admin demos only; customer phone calls keep their configured stack. */

@@ -4,7 +4,7 @@ Set `CARA_ADMIN_DEMO_ELEVENLABS=1` on the local worker and supply a valid server
 
 Only server dispatch metadata with `source: admin_simulator` activates this test. Normal customer telephone calls retain their existing stack. Disabling the switch restores the original admin demo path.
 
-Voice: `ehKZw5kruBt73Gytae2x`. Model: `eleven_v4_turbo`. The worker uses ElevenLabs' Text to Dialogue WebSocket with PCM at 24 kHz, then LiveKit's sentence stream adapter. The older Text to Speech WebSocket is not the v4 protocol. Connections have bounded deadlines, close on cancellation, and reject incomplete/no-audio responses.
+Voice: `0VXT7iQ2kXG7EERbbG9T`. Model: `eleven_v4_turbo`. The worker uses ElevenLabs' Text to Dialogue WebSocket with PCM at 24 kHz, then LiveKit's sentence stream adapter. The older Text to Speech WebSocket is not the v4 protocol. Connections have bounded deadlines, close on cancellation, and reject incomplete/no-audio responses.
 
 The local dashboard and worker must both use `LIVEKIT_AGENT_NAME=cliste-voice-local`; the worker uses `CLISTE_APP_URL=http://localhost:3001`. The existing admin demo buttons, room connection, transcript capture and recording remain in use.
 
