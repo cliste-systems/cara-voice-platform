@@ -19,7 +19,7 @@ EU data residency: project data region **European Union (Frankfurt)**. Inference
 
 1. LiveKit Cloud project **`hellocara`** with EU (Frankfurt) data region
 2. Agent compute **`eu-central`** (set on first `lk agent create`)
-3. Ship plan ($50/mo) — production agents stay warm 24/7
+3. Confirm the configured compute plan: the current Build plan permits sleeping/cold starts; warm production pickup requires a separate plan decision.
 4. `lk cloud auth` and `lk project set-default hellocara`
 
 ## Secrets
@@ -46,11 +46,11 @@ CI: [`.github/workflows/deploy-livekit-agent.yml`](../.github/workflows/deploy-l
 
 Keep `LIVEKIT_AGENT_NAME=cliste-voice-local` in `.env` so local workers do not steal production dispatches (`cliste-retail-node`).
 
-## GPT-Live audio settings deployed 27 September 2026
+## GPT-Live audio settings
 
-`CARA_GPT_LIVE_PREBUFFER_MS=200` enables the tested startup cushion and silence-only replenishment. `CARA_GPT_LIVE_OPENING_MANIFEST=assets/gpt-live/kavanaghs-willow.json` plays the independently checked Willow greeting before starting the live conversation. The runtime image includes the asset. This manifest is specific to the exact Kavanaghs greeting and Willow voice; a mismatch stops startup and requires a newly checked asset. Text rehearsal bypasses this audio-only opening.
+`CARA_GPT_LIVE_PREBUFFER_MS=500` is the current tested startup cushion and silence-only replenishment. `CARA_GPT_LIVE_OPENING_MANIFEST=assets/gpt-live/kavanaghs-willow.json` plays the independently checked Willow greeting before starting the live conversation. The runtime image includes the asset. This manifest is specific to the exact Kavanaghs greeting and Willow voice; a mismatch stops startup and requires a newly checked asset. Text rehearsal bypasses this audio-only opening.
 
-These settings and `CARA_GPT_LIVE_VOICE=willow` were deployed to version `c95ezBW323HT` at 19:43:24 UTC. The version is available and running; runtime logs confirm worker registration as `cliste-retail-node`. The existing SIP dispatch still routes the trunk containing `+353749759508` to that agent. Deployment updated only these three settings; existing credentials and agent-name settings were retained. Keep `CARA_GPT_LIVE_AUDIO_CAPTURE_DIR` unset in production; it is an explicit local debugging option. See [the long-call review](long-call-review-2026-09-27.md) for evidence and remaining limitations.
+Historical 27 September deployment: the earlier 200 ms cushion and `CARA_GPT_LIVE_VOICE=willow` were deployed to version `c95ezBW323HT` at 19:43:24 UTC. The version is available and running; runtime logs confirm worker registration as `cliste-retail-node`. The existing SIP dispatch still routes the trunk containing `+353749759508` to that agent. Deployment updated only these three settings; existing credentials and agent-name settings were retained. Keep `CARA_GPT_LIVE_AUDIO_CAPTURE_DIR` unset in production; it is an explicit local debugging option. See [the long-call review](long-call-review-2026-09-27.md) for evidence and remaining limitations.
 
 Previous image version: `vCB8RKVgUzWF`. If rolling back to code without the verified-opening feature, review the associated setting overrides as well. With CLI v2.16.0, pass each override as a separate `--secrets KEY=VALUE` flag; do not comma-separate them. Do not deploy the local `.env`, which selects `cliste-voice-local` and a localhost webhook.
 

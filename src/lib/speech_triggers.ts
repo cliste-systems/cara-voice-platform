@@ -315,7 +315,7 @@ export function callerSoundsLikeSocialChitchat(text: string): boolean {
 }
 
 /** How-are-you / wellbeing small talk — not a consent answer or business question. */
-export function callerSoundsLikeWellbeingReply(text: string): boolean {
+function callerSoundsLikeWellbeingReply(text: string): boolean {
   const t = text
     .trim()
     .toLowerCase()

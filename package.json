@@ -1,7 +1,7 @@
 {
   "name": "cara-voice-platform",
   "version": "1.0.0",
-  "description": "LiveKit Cara voice worker \u2014 routing links, webhooks, Cartesia TTS via LiveKit Inference",
+  "description": "LiveKit Cara voice worker — routing links, webhooks, Cartesia TTS via LiveKit Inference",
   "engines": {
     "node": ">=20"
   },
@@ -22,7 +22,7 @@
     "gdpr:erase": "tsx scripts/gdpr-erase.ts",
     "gdpr:purge-transcripts": "tsx scripts/gdpr-purge-transcripts.ts",
     "download-files": "node dist/src/agent.js download-files",
-    "download-files:dev": "tsx src/agent.ts download-files || echo '[download-files] failed \u2014 agent will fall back to VAD for turn detection'",
+    "download-files:dev": "tsx src/agent.ts download-files || echo '[download-files] failed — agent will fall back to VAD for turn detection'",
     "preview:persona": "tsx scripts/preview-persona.ts",
     "text-rehearsal": "tsx scripts/text-rehearsal.ts",
     "typecheck": "tsc --noEmit",
@@ -58,7 +58,7 @@
   },
   "overrides": {
     "adm-zip": "0.6.1",
-    "brace-expansion": "5.0.9",
+    "brace-expansion": "5.0.12",
     "protobufjs": "7.6.5",
     "qs": "6.16.0",
     "sharp": "0.35.5"

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { trackCallerCatalogSearchIntent } from './catalog_search_intent.js';
 import { CaraTools, type CaraAgentUserData } from './cara_tools.js';
 
 describe('CaraTools.toolContext', () => {
@@ -272,4 +273,51 @@ describe('caller delivery security boundaries', () => {
       assert.deepEqual(requests[0], requests[1]);
     });
   });
+});
+
+
+it('compares cheapest burgers despite stale model offer arguments, and records the real lookup', async () => {
+  const priorFetch = globalThis.fetch;
+  const priorUrl = process.env.CLISTE_APP_URL;
+  const priorSecret = process.env.CLISTE_VOICE_WEBHOOK_SECRET;
+  const requests: Array<Record<string, unknown>> = [];
+  const events: unknown[] = [];
+  process.env.CLISTE_APP_URL = 'https://catalogue.invalid';
+  process.env.CLISTE_VOICE_WEBHOOK_SECRET = 'test-secret';
+  globalThis.fetch = async (_input, init) => {
+    requests.push(JSON.parse(String(init?.body)));
+    return Response.json({ok: true, matches: [{product_name: 'Beef burgers 4 pack', current_price_eur: 3, score: 1, quote_text: 'Beef burgers four pack for three euro.'}]});
+  };
+  try {
+    const flags: CaraAgentUserData['sessionFlags'] = {
+      linkSent: false, actionTicketCreated: false, callbackRequested: false,
+      smsSent: 0, endPhoneCallUsed: false, askedAnythingElse: false,
+      awaitingAnythingElseReply: false, anythingElseAskCount: 0,
+      callerRespondedAfterAnythingElse: false, closingCall: false, likelySttGarble: false,
+    };
+    trackCallerCatalogSearchIntent('barbecue meat on offer', flags);
+    trackCallerCatalogSearchIntent('burgers', flags);
+    trackCallerCatalogSearchIntent('what would be the cheapest', flags);
+    flags.pendingProductFulfilmentClarification = true;
+    flags.pendingProductSearchState = {query: 'burgers', intent: 'offer', serviceArea: 'grocery', fulfilment: 'prepack'};
+    const tool = new CaraTools().searchSuperValuProducts;
+    const context = {ctx: {userData: {organizationId: 'test-org', calledNumber: 'test-line', sessionFlags: flags, onProductLookupEvent: (event: unknown) => events.push(event)}, session: {currentAgent: {}}}} as unknown as Parameters<typeof tool.execute>[1];
+    const result = await tool.execute({query: 'burger offers', intent: 'offer', service_area: 'grocery', fulfilment: 'prepack'}, context) as {message: string};
+    assert.equal(requests[0]?.query, 'cheapest meat burger for barbecue');
+    assert.equal(requests[0]?.intent, 'price');
+    assert.equal(requests[0]?.service_area, undefined);
+    assert.equal(requests[0]?.fulfilment, undefined);
+    assert.match(result.message, /lowest listed relevant price/);
+    assert.match(result.message, /four pack for three euro/);
+    assert.equal(events.length, 2);
+    assert.deepEqual(events[0], {phase:'start', query:'cheapest meat burger for barbecue', intent:'price'});
+    assert.equal(flags.callerWantsLowestPrice, false);
+    await tool.execute({query: 'cheapest burgers from the butcher counter', intent: 'price', service_area: 'grocery', fulfilment: 'prepack'}, context);
+    assert.equal(requests[1]?.service_area, 'butcher');
+    assert.equal(requests[1]?.fulfilment, 'counter');
+  } finally {
+    globalThis.fetch = priorFetch;
+    if (priorUrl === undefined) delete process.env.CLISTE_APP_URL; else process.env.CLISTE_APP_URL = priorUrl;
+    if (priorSecret === undefined) delete process.env.CLISTE_VOICE_WEBHOOK_SECRET; else process.env.CLISTE_VOICE_WEBHOOK_SECRET = priorSecret;
+  }
 });

@@ -42,6 +42,7 @@ const GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS =
   'For products, prices, stock or offers, call searchSuperValuProducts with the caller\'s own product words ' +
   '(for SuperValu own brand, search "SuperValu <product>"). If they name a counter or area (butcher, deli, fish, bakery, off-licence) pass it as service_area; ' +
   'Broad weekly offers, meat offers, every department, Super 7, multibuys and 3 for 10 are valid searches: use intent offer and preserve the department and promotion wording. Leave service_area unset for multiple departments or departments outside the supported list. ' +
+  'If the caller asks what is cheapest after naming a product, compare it with searchSuperValuProducts using query \"cheapest <product>\" and intent price. Preserve preparation context such as "for barbecue" in that query so cooked ready meals are not compared with raw meat. Preserve a current offer-only request only if they explicitly restrict the comparison to offers. Never claim to have checked without a tool result, and do not ask counter versus pre-packed instead of comparing the returned labelled prices. ' +
   CARA_CLARIFICATION_POLICY + ' ' +
   'if they say counter vs pre-pack, pass fulfilment. Only quote what the tool returns. If nothing matches, briefly say you can\'t confirm it — never say the shop doesn\'t stock it. ' +
   'On the first alcohol answer, mention they must be 18 or over.';
@@ -65,13 +66,16 @@ function frameDurationMs(frame: AudioFrame): number {
 }
 
 /**
- * Optional startup cushion and silence-only replenishment for irregular frame delivery.
- * The default of zero preserves provider PCM without any added delay or silence.
+ * Tested startup cushion and silence-only replenishment for irregular frame delivery.
+ * 500ms covers the observed 315ms speech-frame arrival stall with replay headroom.
+ * An explicit zero disables the cushion for controlled comparisons.
  */
 export function resolveGptLivePrebufferMs(): number {
-  const raw = Number.parseInt(process.env.CARA_GPT_LIVE_PREBUFFER_MS ?? '0', 10);
-  if (!Number.isFinite(raw)) return 0;
-  return Math.min(Math.max(raw, 0), 1000);
+  const configured = process.env.CARA_GPT_LIVE_PREBUFFER_MS?.trim();
+  if (!configured || !/^\d+$/.test(configured)) return 500;
+  const raw = Number(configured);
+  if (!Number.isFinite(raw)) return 500;
+  return Math.min(raw, 1000);
 }
 
 /** Speech-completion heuristic only; too permissive to decide where audio may be padded. */
@@ -545,8 +549,30 @@ export type ResolvedGptLiveRetailModel = {
   label: string;
   voice: string;
   backendModel: string;
+  audioConfig: GptLiveAudioConfig;
   setVerifiedOpening(opening: GptLiveVerifiedOpening): void;
 };
+
+export type GptLiveAudioConfig = Readonly<{
+  prebufferMs: number;
+  roomAudioQueueMs: number;
+  burstTimeoutMs: number;
+  audioGate: 'passthrough';
+  dtx: false;
+  red: true;
+}>;
+
+/** Resolve once per model so published audio and saved call evidence use the same values. */
+export function resolveGptLiveAudioConfig(): GptLiveAudioConfig {
+  return Object.freeze({
+    prebufferMs: resolveGptLivePrebufferMs(),
+    roomAudioQueueMs: resolveGptLiveAudioQueueMs(),
+    burstTimeoutMs: resolveGptLiveBurstTimeoutMs(),
+    audioGate: 'passthrough',
+    dtx: false,
+    red: true,
+  });
+}
 
 /**
  * Duplex keeps one speech handle open for the whole call, so LiveKit only hands the tool result
@@ -589,19 +615,21 @@ export function createGptLiveRetailModel(): ResolvedGptLiveRetailModel | null {
       instructions: GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS,
     },
   });
-  const prebufferMs = resolveGptLivePrebufferMs();
+  const audioConfig = resolveGptLiveAudioConfig();
+  console.info('[gpt_live] audio_configuration', audioConfig);
   // Always wrap so hang-up audio and speech-end detection stay available. 0ms is unmodified PCM.
-  const duplexModel = new PrebufferedDuplexModel(telephonyModel, prebufferMs);
+  const duplexModel = new PrebufferedDuplexModel(telephonyModel, audioConfig.prebufferMs);
 
   return {
     voice,
     backendModel,
+    audioConfig,
     setVerifiedOpening(opening) { duplexModel.verifiedOpening = opening; },
     label: `openai/gpt-live-1:${voice}+${backendModel}`,
     // Pre-wrap so LiveKit does not use the default 800ms burst timeout (splits PCM → clicks).
     instance: new DuplexRealtimeAdapter(duplexModel, {
       gate: () => new PassthroughAudioGate(),
-      audioTimeout: resolveGptLiveBurstTimeoutMs(),
+      audioTimeout: audioConfig.burstTimeoutMs,
     }),
   };
 }

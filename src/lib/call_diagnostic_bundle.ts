@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { CallCostEstimateRecord } from './call_cost_estimate.js';
 import type { PostprocessKnowledgeGap } from './call_postprocess.js';
 import type { TranscriptCompleteness } from './transcript_completeness.js';
+import type { GptLiveAudioConfig } from './gpt_live_retail.js';
 import { assistantAskedWindDown } from './natural_phrasing.js';
 
 export type CallDiagnosticLevel = 'info' | 'warn' | 'error';
@@ -25,6 +26,7 @@ export type CallPipelineSnapshot = {
   tts: string;
   endpointMinMs?: number;
   endpointMaxMs?: number;
+  gptLiveAudio?: GptLiveAudioConfig;
 };
 
 export type CallIdentifiers = {
@@ -62,6 +64,8 @@ const MAX_EVENTS = 300;
 
 export type CallDiagnosticSession = {
   push: (level: CallDiagnosticLevel, tag: string, data?: Record<string, unknown>) => void;
+  /** Persist private review evidence without copying it into ordinary application logs. */
+  record: (level: CallDiagnosticLevel, tag: string, data?: Record<string, unknown>) => void;
   setPipeline: (pipeline: CallPipelineSnapshot) => void;
   setIdentifiers: (ids: CallIdentifiers) => void;
   events: () => CallDiagnosticEvent[];
@@ -74,7 +78,7 @@ export function createCallDiagnosticSession(): CallDiagnosticSession {
   let pipeline: CallPipelineSnapshot | undefined;
   let identifiers: CallIdentifiers = {};
 
-  const push = (level: CallDiagnosticLevel, tag: string, data?: Record<string, unknown>) => {
+  const record = (level: CallDiagnosticLevel, tag: string, data?: Record<string, unknown>) => {
     const entry: CallDiagnosticEvent = {
       atMs: Date.now(),
       level,
@@ -86,6 +90,10 @@ export function createCallDiagnosticSession(): CallDiagnosticSession {
     if (events.length > MAX_EVENTS) {
       events.splice(0, events.length - MAX_EVENTS);
     }
+  };
+
+  const push = (level: CallDiagnosticLevel, tag: string, data?: Record<string, unknown>) => {
+    record(level, tag, data);
     const logFn =
       level === 'error' ? console.error : level === 'warn' ? console.warn : console.info;
     logFn(`[agent] ${tag}`, data ?? '');
@@ -93,6 +101,7 @@ export function createCallDiagnosticSession(): CallDiagnosticSession {
 
   return {
     push,
+    record,
     setPipeline: (p) => {
       pipeline = p;
     },

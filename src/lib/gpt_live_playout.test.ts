@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { ReadableStream, type ReadableStreamDefaultController } from 'node:stream/web';
 import { AudioFrame } from '@livekit/rtc-node';
 import type { DuplexAudioFrame } from '@livekit/agents';
-import { PrebufferedPlayout } from './gpt_live_retail.js';
+import { PrebufferedPlayout, resolveGptLivePrebufferMs } from './gpt_live_retail.js';
 
 const pcm = (value: number, durationMs = 100) => new AudioFrame(
   new Int16Array(24 * durationMs).fill(value), 24000, 1, 24 * durationMs,
@@ -49,7 +49,7 @@ describe('GPT-Live optional playout cushion', () => {
     await io.close();
     assert.deepEqual(io.received.map(({ frame }) => frame), originals);
   });
-  it('preserves every frame and adds nothing with the default zero cushion', async (t) => {
+  it('preserves every frame and adds nothing with an explicit zero cushion', async (t) => {
     t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
     const io = harness(0);
     const originals = [pcm(0), pcm(1), pcm(2), pcm(500), pcm(9000)];
@@ -74,6 +74,50 @@ describe('GPT-Live optional playout cushion', () => {
     assert.deepEqual(io.received.map(({ frame }) => frame), [first, second]);
     assert.deepEqual(io.received.map(({ at }) => at), [1100, 1100]);
     await io.close();
+  });
+
+  it('covers a 315ms speech delivery stall with the default cushion without changing PCM', async (t) => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    const previous = process.env.CARA_GPT_LIVE_PREBUFFER_MS;
+    delete process.env.CARA_GPT_LIVE_PREBUFFER_MS;
+    try {
+      const reports: Array<{ cushionMs: number; maxGapMs: number; startupWaitMs: number }> = [];
+      // Reproduce the 315ms interval followed by 100ms/110ms speech deliveries seen
+      // in the captured call. 100ms source frames normally arrive every 100ms.
+      const arrivals = [0, 100, 200, 300, 400, 500, 815, 915, 1025, 1125];
+      for (const cushionMs of [200, resolveGptLivePrebufferMs()]) {
+        const io = harness(cushionMs);
+        const startedAt = Date.now();
+        const originals = arrivals.map((_, index) => pcm(1200 + index * 100));
+        let previousArrival = 0;
+        for (let index = 0; index < arrivals.length; index++) {
+          t.mock.timers.tick(arrivals[index]! - previousArrival);
+          previousArrival = arrivals[index]!;
+          await io.push(originals[index]!);
+        }
+        await io.close();
+        assert.equal(io.received.length, originals.length, 'speech must not gain padding');
+        for (let index = 0; index < originals.length; index++) {
+          assert.equal(io.received[index]!.frame, originals[index], 'frame identity and order');
+          assert.ok(io.received[index]!.frame.data.every((sample) => sample === 1200 + index * 100), 'PCM unchanged');
+        }
+        // Model a real-time consumer. This measures queue headroom, not device playback.
+        let end = io.received[0]!.at;
+        let maxGapMs = 0;
+        for (const { frame, at } of io.received) {
+          maxGapMs = Math.max(maxGapMs, at - end);
+          end = Math.max(end, at) + frame.samplesPerChannel / 24;
+        }
+        reports.push({ cushionMs, maxGapMs, startupWaitMs: io.received[0]!.at - startedAt });
+      }
+      assert.deepEqual(reports, [
+        { cushionMs: 200, maxGapMs: 115, startupWaitMs: 100 },
+        { cushionMs: 500, maxGapMs: 0, startupWaitMs: 400 },
+      ]);
+    } finally {
+      if (previous === undefined) delete process.env.CARA_GPT_LIVE_PREBUFFER_MS;
+      else process.env.CARA_GPT_LIVE_PREBUFFER_MS = previous;
+    }
   });
 
   it('bounds startup waiting and never holds speech again after a later gap', async (t) => {

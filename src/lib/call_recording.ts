@@ -161,18 +161,30 @@ function getEgressS3Client(): S3Client | null {
   });
 }
 
-function callRecordingEnabled(): boolean {
+export type CallRecordingDisabledReason =
+  | 'offline_playground'
+  | 'disabled_by_config'
+  | 'missing_livekit_credentials'
+  | 'missing_supabase_credentials'
+  | 'missing_compatible_egress_storage';
+
+/** Safe diagnostic codes only: never include storage credentials or endpoint values. */
+export function resolveCallRecordingDisabledReason(): CallRecordingDisabledReason | null {
+  if (isOfflinePlayground()) return 'offline_playground';
   const disabled = process.env.CALL_RECORDING_ENABLED?.trim().toLowerCase();
   if (disabled === '0' || disabled === 'false' || disabled === 'off') {
-    return false;
+    return 'disabled_by_config';
   }
-  return Boolean(
-    process.env.LIVEKIT_URL?.trim() &&
-      process.env.LIVEKIT_API_KEY?.trim() &&
-      process.env.LIVEKIT_API_SECRET?.trim() &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() &&
-      resolveEgressS3Upload(),
-  );
+  if (!readEnv('LIVEKIT_URL') || !readEnv('LIVEKIT_API_KEY') || !readEnv('LIVEKIT_API_SECRET')) {
+    return 'missing_livekit_credentials';
+  }
+  if (!readEnv('SUPABASE_SERVICE_ROLE_KEY')) return 'missing_supabase_credentials';
+  if (!resolveEgressS3Config()) return 'missing_compatible_egress_storage';
+  return null;
+}
+
+function callRecordingEnabled(): boolean {
+  return resolveCallRecordingDisabledReason() === null;
 }
 
 function getEgressClient(): EgressClient {
@@ -224,11 +236,22 @@ export async function startCallRecording(input: {
   roomName: string;
   organizationId: string;
 }): Promise<string | null> {
-  if (isOfflinePlayground() || !callRecordingEnabled()) return null;
-
   const room = input.roomName.trim();
   const organizationId = input.organizationId.trim();
   if (!room || !organizationId) return null;
+
+  const disabledReason = resolveCallRecordingDisabledReason();
+  if (disabledReason) {
+    console.warn('[call_recording] disabled', { reason: disabledReason });
+    reportRecordingBreak(
+      'recording_disabled',
+      'Call recording was not started because its configuration is incomplete or disabled.',
+      { organizationId, roomName: room },
+      'warning',
+      { reason: disabledReason },
+    );
+    return null;
+  }
 
   const s3 = resolveEgressS3Upload();
   if (!s3) return null;

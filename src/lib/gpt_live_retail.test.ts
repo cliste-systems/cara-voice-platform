@@ -7,6 +7,7 @@ import {
   GPT_LIVE_RETAIL_VOICE_DEFAULT,
   gptLiveUtteranceEndsWithFarewell,
   resolveGptLiveAudioQueueMs,
+  resolveGptLiveAudioConfig,
   resolveGptLiveBurstTimeoutMs,
   isSilentFrame,
   resolveGptLivePrebufferMs,
@@ -108,16 +109,56 @@ describe('gpt_live_retail', () => {
     assert.equal(isSilentFrame(new AudioFrame(speech, 24000, 1, 2400)), false);
   });
 
-  it('defaults GPT-Live prebuffer to 0ms so audio is unmodified', () => {
+  it('keeps the tested 500ms cushion when the environment setting is absent or invalid', () => {
     const prev = process.env.CARA_GPT_LIVE_PREBUFFER_MS;
     delete process.env.CARA_GPT_LIVE_PREBUFFER_MS;
     try {
-      assert.equal(resolveGptLivePrebufferMs(), 0);
-      process.env.CARA_GPT_LIVE_PREBUFFER_MS = '0';
-      assert.equal(resolveGptLivePrebufferMs(), 0);
+      assert.equal(resolveGptLivePrebufferMs(), 500);
+      for (const value of ['', ' ', 'invalid', '-1', '0oops', '20.5', 'Infinity']) {
+        process.env.CARA_GPT_LIVE_PREBUFFER_MS = value;
+        assert.equal(resolveGptLivePrebufferMs(), 500, value);
+      }
     } finally {
       if (prev === undefined) delete process.env.CARA_GPT_LIVE_PREBUFFER_MS;
       else process.env.CARA_GPT_LIVE_PREBUFFER_MS = prev;
+    }
+  });
+
+  it('honors explicit zero for comparisons and bounds a configured cushion to one second', () => {
+    const prev = process.env.CARA_GPT_LIVE_PREBUFFER_MS;
+    try {
+      for (const [value, expected] of [['0', 0], ['200', 200], [' 500 ', 500], ['2000', 1000]] as const) {
+        process.env.CARA_GPT_LIVE_PREBUFFER_MS = value;
+        assert.equal(resolveGptLivePrebufferMs(), expected, value);
+      }
+    } finally {
+      if (prev === undefined) delete process.env.CARA_GPT_LIVE_PREBUFFER_MS;
+      else process.env.CARA_GPT_LIVE_PREBUFFER_MS = prev;
+    }
+  });
+
+  it('captures one immutable audio configuration for publication and call diagnostics', () => {
+    const values = {
+      CARA_GPT_LIVE_PREBUFFER_MS: '200',
+      CARA_GPT_LIVE_AUDIO_QUEUE_MS: '4000',
+      CARA_GPT_LIVE_BURST_TIMEOUT_MS: '9000',
+    };
+    const previous = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
+    try {
+      Object.assign(process.env, values);
+      const config = resolveGptLiveAudioConfig();
+      assert.deepEqual(config, {
+        prebufferMs: 200, roomAudioQueueMs: 4000, burstTimeoutMs: 9000,
+        audioGate: 'passthrough', dtx: false, red: true,
+      });
+      process.env.CARA_GPT_LIVE_PREBUFFER_MS = '0';
+      assert.equal(config.prebufferMs, 200);
+      assert.equal(Object.isFrozen(config), true);
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 });

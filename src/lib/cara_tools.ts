@@ -35,6 +35,7 @@ import {
 } from './conversational_retail_policy.js';
 import {
   inferWeeklyOffersListIntent,
+  callerRequestsLowestPrice,
   resolveCatalogSearchIntent,
   type CatalogSearchIntent,
 } from './catalog_search_intent.js';
@@ -112,6 +113,10 @@ export type CaraSessionFlags = {
   retailLastCapturedName?: string | null;
   /** Caller recently asked about weekly offers — steer catalog lookup to promo items. */
   callerAskedAboutOffers?: boolean;
+  callerWantsLowestPrice?: boolean;
+  callerLowestPriceOffersOnly?: boolean;
+  callerBarbecueCooking?: boolean;
+  callerMeatPreference?: boolean;
   /** Exact Rewards/Real Rewards price point from the latest caller turn. */
   rewardsPricePoint?: number | null;
   /** One-time alcohol age reminder already given this call. */
@@ -132,6 +137,7 @@ export type CaraSessionFlags = {
 };
 
 export type CaraAgentUserData = {
+  onProductLookupEvent?: (event: { phase: 'start' | 'complete'; query: string; intent?: CatalogSearchIntent | undefined; matchCount?: number; ok?: boolean; clarification?: boolean }) => void;
   organizationId: string;
   businessName: string;
   calledNumber: string;
@@ -905,7 +911,7 @@ export class CaraTools {
         .enum(['offer', 'price', 'stock'])
         .optional()
         .describe(
-          'offer = on offer/this week/special; price = how much/cost; stock = do you stock/carry',
+          'offer = on offer/this week/special; price = how much/cost/cheapest across regular prices and offers; stock = do you stock/carry',
         ),
       service_area: z
         .enum(['butcher', 'deli', 'fish', 'produce', 'bakery', 'dairy', 'off_licence', 'grocery'])
@@ -921,11 +927,13 @@ export class CaraTools {
         ),
     }),
     execute: async ({ query, intent: explicitIntent, service_area: modelServiceArea, fulfilment }, { ctx }) => {
+      const ud = readCaraUserData(ctx);
       const finish = <T>(payload: T): T => {
+        const result = payload as { ok?: boolean; matches?: unknown[]; clarification_required?: boolean };
+        ud.onProductLookupEvent?.({phase: 'complete', query: lookupQuery, intent: resolvedIntent, ok: result.ok === true, matchCount: result.matches?.length ?? 0, clarification: result.clarification_required === true || ud.sessionFlags.pendingProductFulfilmentClarification === true || ud.sessionFlags.pendingProductRefinementClarification === true});
         deliverGptLiveToolResult(ctx, payload);
         return payload;
       };
-      const ud = readCaraUserData(ctx);
       const trimmed = query.trim();
       const rewardsPricePoint =
         inferRewardsPricePoint(trimmed) ??
@@ -949,28 +957,50 @@ export class CaraTools {
         (!pendingState?.serviceArea || !(inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) || (inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) === pendingState.serviceArea) &&
         productQueryTokens(trimmed).length > 0 &&
         productQueryTokens(trimmed).length <= 3;
-      const lookupQuery =
+      const baseLookupQuery =
         callerOnlyChoseFulfilment && pendingProductQuery
           ? pendingProductQuery
           : callerProvidedRefinement
             ? `${pendingProductQuery} ${trimmed}`
             : trimmed;
+      const wantsLowestPrice = callerRequestsLowestPrice(trimmed) || ud.sessionFlags.callerWantsLowestPrice === true;
+      const lowestPriceOffersOnly = ud.sessionFlags.callerWantsLowestPrice === true
+        ? ud.sessionFlags.callerLowestPriceOffersOnly === true
+        : resolveCatalogSearchIntent({query: trimmed, ...(explicitIntent ? {explicitIntent} : {})}) === 'offer';
+      const categoryQuery = ud.sessionFlags.callerMeatPreference &&
+        /\bburgers?\b/i.test(baseLookupQuery) &&
+        !/\b(?:meat|beef|chicken|turkey|pork|lamb|vegetarian|vegan|sauce|marinade|rub)\b/i.test(baseLookupQuery)
+        ? `meat ${baseLookupQuery}` : baseLookupQuery;
+      const cookingQuery = ud.sessionFlags.callerBarbecueCooking &&
+        /\b(?:burgers?|sausages?|steaks?|chicken|meat)\b/i.test(categoryQuery) &&
+        !/\b(?:barbecue|barbeque|bbq|sauce|marinade|flavou?r|rub|dinner|meal|microwave)\b/i.test(categoryQuery)
+        ? `${categoryQuery} for barbecue` : categoryQuery;
+      const comparisonQuery = wantsLowestPrice && !lowestPriceOffersOnly
+        ? cookingQuery.replace(/\b(?:offers?|deals?|specials?|this week)\b/gi, ' ').replace(/\s+/g, ' ').trim()
+        : cookingQuery;
+      const lookupQuery = wantsLowestPrice && !callerRequestsLowestPrice(comparisonQuery)
+        ? `cheapest ${comparisonQuery}`.slice(0, 120) : comparisonQuery;
       const queryFulfilment = inferExplicitProductFulfilment(trimmed);
       const queryServiceArea = inferExplicitProductServiceArea(trimmed);
+      // A comparison must span packs and counters unless the caller/query scoped it.
+      // Backend models sometimes fill optional fields with guessed grocery/prepack defaults.
       const effectiveFulfilment: RetailProductFulfilment | undefined =
         queryFulfilment ??
-        fulfilment ??
-        ((pendingFulfilmentClarification || callerProvidedRefinement) ? pendingState?.fulfilment : undefined);
+        (wantsLowestPrice ? undefined : fulfilment) ??
+        ((pendingFulfilmentClarification || callerProvidedRefinement)
+          ? wantsLowestPrice ? inferExplicitProductFulfilment(pendingProductQuery ?? '') : pendingState?.fulfilment
+          : undefined);
       const effectiveServiceArea: RetailProductServiceArea | undefined =
         queryServiceArea ??
-        modelServiceArea ??
+        (wantsLowestPrice ? undefined : modelServiceArea) ??
         (pendingFulfilmentClarification || pendingRefinementClarification
-          ? pendingState?.serviceArea
+          ? wantsLowestPrice ? inferExplicitProductServiceArea(pendingProductQuery ?? '') : pendingState?.serviceArea
           : undefined);
 
       const resolvedIntent: CatalogSearchIntent | undefined =
         rewardsPricePoint != null
           ? 'offer'
+          : wantsLowestPrice ? (lowestPriceOffersOnly ? 'offer' : 'price')
           : resolveCatalogSearchIntent({
               query: lookupQuery,
               ...(explicitIntent ? { explicitIntent: explicitIntent as CatalogSearchIntent } : {}),
@@ -1001,6 +1031,7 @@ export class CaraTools {
         ...(effectiveFulfilment ? { fulfilment: effectiveFulfilment } : {}),
       };
 
+      ud.onProductLookupEvent?.({phase: 'start', query: lookupQuery, intent: resolvedIntent});
       let result: Awaited<ReturnType<typeof postSearchSupervaluProducts>>;
       if (rewardsPricePoint != null) {
         try {
@@ -1186,6 +1217,11 @@ export class CaraTools {
         });
       }
 
+      ud.sessionFlags.callerWantsLowestPrice = false;
+      ud.sessionFlags.callerLowestPriceOffersOnly = false;
+      const comparisonGuidance = wantsLowestPrice
+        ? 'Give the lowest listed relevant price returned by this comparison, naming the exact pack/quantity. Compare counter per-kilo prices separately from packs. Do not call it the cheapest in-store or best value per burger without complete comparable data. Keep offers, membership conditions and local availability caveats. Answer the comparison now; do not ask them to choose a brand or counter versus packs when they asked you to compare.\n\n'
+        : '';
       const formatted = result.matches
         .map((match) => match.quote_text.trim())
         .join('\n\n');
@@ -1208,7 +1244,7 @@ export class CaraTools {
 
       return finish({
         ok: true,
-        message: `${CARA_CLARIFICATION_POLICY}\n\n${freshnessNote}${offerPrefix}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        message: `${CARA_CLARIFICATION_POLICY}\n\n${comparisonGuidance}${freshnessNote}${offerPrefix}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
       });
     },

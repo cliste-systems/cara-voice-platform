@@ -4,11 +4,40 @@ import { describe, it } from 'node:test';
 import {
   analyzeTranscriptForIssues,
   buildCallDiagnosticBundle,
+  createCallDiagnosticSession,
   extractToolLinesFromTranscript,
   formatDiagnosticMarkdown,
 } from './call_diagnostic_bundle.js';
+import { buildCloseDiagnosticsPayload } from './call_close_diagnostics.js';
 
 describe('call_diagnostic_bundle', () => {
+  it('persists resolved audio settings and lookup evidence without logging private queries', (t) => {
+    const info = t.mock.method(console, 'info', () => {});
+    const warn = t.mock.method(console, 'warn', () => {});
+    const error = t.mock.method(console, 'error', () => {});
+    const diag = createCallDiagnosticSession();
+    const audioConfig = {
+      prebufferMs: 200, roomAudioQueueMs: 8000, burstTimeoutMs: 8000,
+      audioGate: 'passthrough' as const, dtx: false as const, red: true as const,
+    };
+    diag.setPipeline({ stt: 'gpt-live-built-in', llm: 'gpt-live-1', tts: 'gpt-live-built-in', gptLiveAudio: audioConfig });
+    diag.record('info', 'product_lookup_start', { phase: 'start', query: 'burgers', intent: 'offer' });
+    diag.record('info', 'product_lookup_completed', { phase: 'complete', query: 'burgers', ok: true, matchCount: 4 });
+    const saved = JSON.parse(JSON.stringify(buildCloseDiagnosticsPayload({
+      latency: { replyMs: [], userSpeakingToThinkingMs: [] },
+      pipeline: diag.getPipeline()!,
+      configSnapshot: { gptLiveAudio: audioConfig },
+      events: diag.events(), greetingPlayed: true, disclosureConfirmed: true,
+    })));
+    assert.deepEqual(saved.pipeline.gptLiveAudio, audioConfig);
+    assert.deepEqual(saved.configSnapshot.gptLiveAudio, audioConfig);
+    assert.deepEqual(saved.events.map((event: { tag: string }) => event.tag), ['product_lookup_start', 'product_lookup_completed']);
+    assert.equal(saved.events[0].data.query, 'burgers');
+    assert.equal(saved.events[1].data.matchCount, 4);
+    assert.equal(info.mock.callCount() + warn.mock.callCount() + error.mock.callCount(), 0);
+    assert.deepEqual(saved.toolLines, []); // Internal tool evidence is separate from spoken dialogue.
+  });
+
   it('flags robotic wind-down and missing goodbye', () => {
     const transcript = [
       'Assistant: A patch test is a simple skin test.',

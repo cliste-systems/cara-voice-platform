@@ -90,3 +90,37 @@ describe('promotion and department requests', () => {
     }
   });
 });
+
+
+describe('lowest-price follow-up regression', () => {
+  it('clears an earlier offer-only preference when the caller asks what is cheapest', () => {
+    const flags: Parameters<typeof trackCallerCatalogSearchIntent>[1] = {};
+    trackCallerCatalogSearchIntent('any meat on offer for a barbecue', flags);
+    trackCallerCatalogSearchIntent('burgers', flags);
+    trackCallerCatalogSearchIntent('what would be the cheapest', flags);
+    assert.equal(flags.callerWantsLowestPrice, true);
+    assert.equal(flags.callerBarbecueCooking, true);
+    assert.equal(flags.callerMeatPreference, true);
+    assert.equal(flags.callerAskedAboutOffers, false);
+    assert.equal(flags.callerLowestPriceOffersOnly, false);
+    assert.equal(inferCatalogSearchIntent('cheapest burgers'), 'price');
+  });
+  it('preserves an explicitly offer-only cheapest request', () => {
+    const flags: Parameters<typeof trackCallerCatalogSearchIntent>[1] = {};
+    trackCallerCatalogSearchIntent('cheapest burger offers', flags);
+    assert.equal(flags.callerWantsLowestPrice, true);
+    assert.equal(flags.callerLowestPriceOffersOnly, true);
+    trackCallerCatalogSearchIntent('do you stock laptops', flags);
+    assert.equal(flags.callerWantsLowestPrice, false);
+  });
+});
+
+ it('does not treat barbecue sauce as a raw cooking request and allows a prepared-food correction', () => {
+   const flags: Parameters<typeof trackCallerCatalogSearchIntent>[1] = {};
+   trackCallerCatalogSearchIntent('cheapest barbecue sauce', flags);
+   assert.equal(flags.callerBarbecueCooking, undefined);
+   trackCallerCatalogSearchIntent('burgers for a barbecue', flags);
+   assert.equal(flags.callerBarbecueCooking, true);
+   trackCallerCatalogSearchIntent('actually a microwave burger', flags);
+   assert.equal(flags.callerBarbecueCooking, false);
+ });

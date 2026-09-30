@@ -7,7 +7,6 @@ import {
   buildGptLiveRetailOpeningInstructions,
   createGptLiveRetailModel,
   rejectGptLiveUnavailableCall,
-  resolveGptLiveAudioQueueMs,
   shouldUseGptLiveRetailStack,
   gptLiveUtteranceEndsWithFarewell,
   type AssistantSpeechWaitOutcome,
@@ -1150,6 +1149,7 @@ export default defineAgent({
           voice: gptLiveRetail.voice,
           ttsProvider: 'gpt-live-built-in',
           backendModel: gptLiveRetail.backendModel,
+          gptLiveAudio: gptLiveRetail.audioConfig,
         }
       : {
           stt: inferenceSttModel,
@@ -1189,8 +1189,9 @@ export default defineAgent({
       sttLanguage: inferenceSttLanguage,
       gptLiveRetail: activeGptLiveRetail,
       gptLiveVoice: gptLiveRetail?.voice ?? null,
-      gptLiveOutputDtx: activeGptLiveRetail ? false : null,
-      gptLiveOutputRed: activeGptLiveRetail ? true : null,
+      gptLiveAudio: gptLiveRetail?.audioConfig ?? null,
+      gptLiveOutputDtx: gptLiveRetail?.audioConfig.dtx ?? null,
+      gptLiveOutputRed: gptLiveRetail?.audioConfig.red ?? null,
     };
 
     console.info('[agent] pipeline', pipelineLabel);
@@ -1268,6 +1269,13 @@ export default defineAgent({
             },
           },
         });
+
+    session.userData.onProductLookupEvent = (event) => {
+      // Queries belong in private call evidence, never ordinary logs or spoken transcripts.
+      diag.record(event.ok === false ? 'warn' : 'info',
+        event.phase === 'start' ? 'product_lookup_start' : 'product_lookup_completed',
+        { ...event, query: event.query.slice(0, 500) });
+    };
 
     const deadAirMs = demoExperienceStack
       ? Number.parseInt(process.env.DEMO_DEAD_AIR_MS ?? '20000', 10)
@@ -1407,7 +1415,7 @@ export default defineAgent({
     let thinkingStartedAt: number | null = null;
     let userStoppedSpeakingAt: number | null = null;
     let sttFailureDetected = false;
-    const gptLiveAudioQueueMs = activeGptLiveRetail ? resolveGptLiveAudioQueueMs() : 0;
+    const gptLiveAudioQueueMs = gptLiveRetail?.audioConfig.roomAudioQueueMs ?? 0;
     let ttsFailureDetected = false;
     let sttRecoverySpeechPlayed = false;
     /** GPT-Live 9508 — our STT/barge-in guards fight duplex and cause mid-sentence cuts. */
@@ -3483,8 +3491,8 @@ export default defineAgent({
               // Preserve packet-loss redundancy while testing the silence-transition artifacts.
               audioPublishOptions: new TrackPublishOptions({
                 source: TrackSource.SOURCE_MICROPHONE,
-                dtx: false,
-                red: true,
+                dtx: gptLiveRetail!.audioConfig.dtx,
+                red: gptLiveRetail!.audioConfig.red,
               }),
             },
             record: { audio: false, traces: true, logs: true, transcript: true },
