@@ -1,0 +1,505 @@
+# Real worker rehearsals; a retrieval test alone cannot satisfy these assertions.
+- name: fruit-vegetables-broad-0
+  turns:
+    - "Any offers in Fruit & Vegetables?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: fruit-vegetables-broad-1
+  turns:
+    - "Have ye got any deals in the Fruit & Vegetables section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: fruit-vegetables-broad-2
+  turns:
+    - "What products are available in Fruit & Vegetables?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: fruit-vegetables-narrow-follow-up
+  turns:
+    - "Any offers in Fruit & Vegetables?"
+    - "apples please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: bakery-broad-0
+  turns:
+    - "Any offers in Bakery?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: bakery-broad-1
+  turns:
+    - "Have ye got any deals in the Bakery section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: bakery-broad-2
+  turns:
+    - "What products are available in Bakery?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: bakery-narrow-follow-up
+  turns:
+    - "Any offers in Bakery?"
+    - "bread please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: meat-poultry-broad-0
+  turns:
+    - "Any offers in Meat & Poultry?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: meat-poultry-broad-1
+  turns:
+    - "Have ye got any deals in the Meat & Poultry section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: meat-poultry-broad-2
+  turns:
+    - "What products are available in Meat & Poultry?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: meat-poultry-narrow-follow-up
+  turns:
+    - "Any offers in Meat & Poultry?"
+    - "chicken breasts please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: fish-seafood-broad-0
+  turns:
+    - "Any offers in Fish & Seafood?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: fish-seafood-broad-1
+  turns:
+    - "Have ye got any deals in the Fish & Seafood section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: fish-seafood-broad-2
+  turns:
+    - "What products are available in Fish & Seafood?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: fish-seafood-narrow-follow-up
+  turns:
+    - "Any offers in Fish & Seafood?"
+    - "salmon please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: deli-counter-broad-0
+  turns:
+    - "Any offers in Deli Counter?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: deli-counter-broad-1
+  turns:
+    - "Have ye got any deals in the Deli Counter section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: deli-counter-broad-2
+  turns:
+    - "What products are available in Deli Counter?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: deli-counter-narrow-follow-up
+  turns:
+    - "Any offers in Deli Counter?"
+    - "sliced ham please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: cheese-broad-0
+  turns:
+    - "Any offers in Cheese?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: cheese-broad-1
+  turns:
+    - "Have ye got any deals in the Cheese section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: cheese-broad-2
+  turns:
+    - "What products are available in Cheese?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: cheese-narrow-follow-up
+  turns:
+    - "Any offers in Cheese?"
+    - "cheddar please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: milk-yogurt-butter-eggs-broad-0
+  turns:
+    - "Any offers in Milk, Yogurt, Butter & Eggs?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: milk-yogurt-butter-eggs-broad-1
+  turns:
+    - "Have ye got any deals in the Milk, Yogurt, Butter & Eggs section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: milk-yogurt-butter-eggs-broad-2
+  turns:
+    - "What products are available in Milk, Yogurt, Butter & Eggs?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: milk-yogurt-butter-eggs-narrow-follow-up
+  turns:
+    - "Any offers in Milk, Yogurt, Butter & Eggs?"
+    - "whole milk please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: health-wellness-broad-0
+  turns:
+    - "Any offers in Health & Wellness?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: health-wellness-broad-1
+  turns:
+    - "Have ye got any deals in the Health & Wellness section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: health-wellness-broad-2
+  turns:
+    - "What products are available in Health & Wellness?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: health-wellness-narrow-follow-up
+  turns:
+    - "Any offers in Health & Wellness?"
+    - "protein bars please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: chilled-food-broad-0
+  turns:
+    - "Any offers in Chilled Food?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: chilled-food-broad-1
+  turns:
+    - "Have ye got any deals in the Chilled Food section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: chilled-food-broad-2
+  turns:
+    - "What products are available in Chilled Food?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: chilled-food-narrow-follow-up
+  turns:
+    - "Any offers in Chilled Food?"
+    - "ready meals please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: food-cupboard-broad-0
+  turns:
+    - "Any offers in Food Cupboard?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: food-cupboard-broad-1
+  turns:
+    - "Have ye got any deals in the Food Cupboard section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: food-cupboard-broad-2
+  turns:
+    - "What products are available in Food Cupboard?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: food-cupboard-narrow-follow-up
+  turns:
+    - "Any offers in Food Cupboard?"
+    - "tea please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: frozen-foods-broad-0
+  turns:
+    - "Any offers in Frozen Foods?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: frozen-foods-broad-1
+  turns:
+    - "Have ye got any deals in the Frozen Foods section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: frozen-foods-broad-2
+  turns:
+    - "What products are available in Frozen Foods?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: frozen-foods-narrow-follow-up
+  turns:
+    - "Any offers in Frozen Foods?"
+    - "pizza please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: drinks-broad-0
+  turns:
+    - "Any offers in Drinks?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: drinks-broad-1
+  turns:
+    - "Have ye got any deals in the Drinks section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: drinks-broad-2
+  turns:
+    - "What products are available in Drinks?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: drinks-narrow-follow-up
+  turns:
+    - "Any offers in Drinks?"
+    - "orange juice please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: beauty-personal-care-broad-0
+  turns:
+    - "Any offers in Beauty & Personal Care?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: beauty-personal-care-broad-1
+  turns:
+    - "Have ye got any deals in the Beauty & Personal Care section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: beauty-personal-care-broad-2
+  turns:
+    - "What products are available in Beauty & Personal Care?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: beauty-personal-care-narrow-follow-up
+  turns:
+    - "Any offers in Beauty & Personal Care?"
+    - "shampoo please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: baby-broad-0
+  turns:
+    - "Any offers in Baby?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: baby-broad-1
+  turns:
+    - "Have ye got any deals in the Baby section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: baby-broad-2
+  turns:
+    - "What products are available in Baby?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: baby-narrow-follow-up
+  turns:
+    - "Any offers in Baby?"
+    - "nappies please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: household-cleaning-broad-0
+  turns:
+    - "Any offers in Household & Cleaning?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: household-cleaning-broad-1
+  turns:
+    - "Have ye got any deals in the Household & Cleaning section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: household-cleaning-broad-2
+  turns:
+    - "What products are available in Household & Cleaning?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: household-cleaning-narrow-follow-up
+  turns:
+    - "Any offers in Household & Cleaning?"
+    - "laundry detergent please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: pets-broad-0
+  turns:
+    - "Any offers in Pets?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: pets-broad-1
+  turns:
+    - "Have ye got any deals in the Pets section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: pets-broad-2
+  turns:
+    - "What products are available in Pets?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: pets-narrow-follow-up
+  turns:
+    - "Any offers in Pets?"
+    - "dog treats please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: wine-beer-spirits-broad-0
+  turns:
+    - "Any offers in Wine, Beer & Spirits?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: wine-beer-spirits-broad-1
+  turns:
+    - "Have ye got any deals in the Wine, Beer & Spirits section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: wine-beer-spirits-broad-2
+  turns:
+    - "What products are available in Wine, Beer & Spirits?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: wine-beer-spirits-narrow-follow-up
+  turns:
+    - "Any offers in Wine, Beer & Spirits?"
+    - "lager please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"
+- name: newsagent-tobacconist-broad-0
+  turns:
+    - "Any offers in Newsagent & Tobacconist?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: newsagent-tobacconist-broad-1
+  turns:
+    - "Have ye got any deals in the Newsagent & Tobacconist section?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: newsagent-tobacconist-broad-2
+  turns:
+    - "What products are available in Newsagent & Tobacconist?"
+  expect:
+    clarification: true
+    must_not_quote_prices: true
+- name: newsagent-tobacconist-narrow-follow-up
+  turns:
+    - "Any offers in Newsagent & Tobacconist?"
+    - "newspapers please"
+  turn_expect:
+    - clarification: true
+      must_not_quote_prices: true
+    - must_not_contain:
+        - "Which department were you thinking of"
+        - "that does not mean there are no offers"

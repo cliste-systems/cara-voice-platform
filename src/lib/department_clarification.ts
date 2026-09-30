@@ -6,6 +6,10 @@ const DEPARTMENTS = new Set([
   'frozen', 'frozen food', 'household', 'cleaning', 'baby', 'baby care', 'pet', 'pets', 'pet food',
   'health', 'beauty', 'health beauty', 'personal care', 'grocery', 'groceries', 'food cupboard',
   'ambient', 'confectionery', 'snacks', 'chilled', 'wine', 'beer', 'spirits',
+  'fruit vegetables', 'meat poultry', 'fish seafood', 'deli counter', 'cheese',
+  'milk yogurt butter eggs', 'milk yoghurt butter eggs', 'health wellness',
+  'chilled food', 'frozen foods', 'beauty personal care', 'household cleaning',
+  'wine beer spirits', 'newsagent tobacconist', 'newsagent', 'tobacconist',
 ]);
 const FILLER = new Set(('i im was just wondering hello hi there do you ye have got any anything what whats is are the a an in on at from for of and this week weekly today current latest offers offer deals deal specials special promotions promotion please section sections department departments aisle aisles counter counters prepack prepacked pre packed fresh range stock sell selling available products items can could tell me about your').split(' '));
 export function departmentClarification(query: string): string | null {

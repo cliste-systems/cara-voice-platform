@@ -344,7 +344,7 @@ async function runConversation(input: {
   line: string;
   turns: string[];
   options: CliOptions;
-}): Promise<{ transcript: string[]; toolCalls: TextRehearsalToolCall[] }> {
+}): Promise<{ transcript: string[]; toolCalls: TextRehearsalToolCall[]; replies: { assistant: string; tools: TextRehearsalToolCall[] }[] }> {
   const session = await createSession({
     line: input.line,
     callerNumber: input.options.callerNumber,
@@ -353,6 +353,7 @@ async function runConversation(input: {
   const client = new TextRehearsalClient(session.roomName, session.token, session.url);
   const transcript: string[] = [];
   const toolCalls: TextRehearsalToolCall[] = [];
+  const replies: { assistant: string; tools: TextRehearsalToolCall[] }[] = [];
 
   try {
     await client.connect();
@@ -363,6 +364,7 @@ async function runConversation(input: {
 
     for (const turn of input.turns) {
       const result = await client.sendTurn(turn, input.options.timeoutMs);
+      replies.push({ assistant: result.assistant, tools: result.tools });
       transcript.push(...result.lines);
       if (result.assistant) {
         transcript.push(`Assistant: ${result.assistant}`);
@@ -373,7 +375,7 @@ async function runConversation(input: {
     await client.disconnect();
   }
 
-  return { transcript, toolCalls };
+  return { transcript, toolCalls, replies };
 }
 
 async function runScenario(
@@ -381,7 +383,7 @@ async function runScenario(
   scenario: TextRehearsalScenario,
   options: CliOptions,
 ): Promise<TextRehearsalScenarioResult> {
-  const { transcript, toolCalls } = await runConversation({
+  const { transcript, toolCalls, replies } = await runConversation({
     line,
     turns: scenario.turns,
     options,
@@ -394,6 +396,12 @@ async function runScenario(
     toolCalls,
     ...(scenario.expect ? { expect: scenario.expect } : {}),
   });
+  for (const [index, reply] of replies.entries()) {
+    if (!reply.assistant.trim()) failures.push(`turn ${index + 1}: missing assistant reply`);
+    const expect = scenario.turn_expect?.[index];
+    if (expect) failures.push(...evaluateTextRehearsalExpectations({ assistantLines: [reply.assistant], toolCalls: reply.tools, expect }).map(failure => `turn ${index + 1}: ${failure}`));
+  }
+  if (scenario.turn_expect && scenario.turn_expect.length !== replies.length) failures.push('turn expectation/reply count mismatch');
   return {
     name: scenario.name,
     passed: failures.length === 0,

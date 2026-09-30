@@ -2,10 +2,8 @@
   turns:
     - "what's on offer at the meat counter this week?"
   expect:
-    clarification: false
-    fulfilment: counter
-    must_mention:
-      - "per kilo"
+    clarification: true
+    must_not_quote_prices: true
 
 - name: steak_offers_vague
   turns:

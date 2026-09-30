@@ -73,6 +73,12 @@ const TENS_WORDS = [
 export function inferRewardsPricePoint(query: string): number | null {
   const q = query.toLowerCase();
   if (!/\b(?:real\s+rewards?|rewards?)(?:\s+price)?\b/i.test(q)) return null;
+  if (/\bpoints?\b/.test(q)) return null;
+  // Price-point browsing has no named product. A pack size such as 330 ml
+  // must never select every unrelated Rewards item at 330 euro.
+  const noise = new Set(['what','whats','anything','with','real','rewards','reward','price','prices','offers','offer','for','at','euro','euros','are','is','on','the','this','week','only','show','me','all','deals','deal','specials','have','you','got','any','please','in','department','section','butcher','deli','fish','produce','dairy','bakery','grocery','alcohol','wine','beer','spirits',...Object.keys(EURO_WORDS),...Object.keys(CENT_WORDS)]);
+  const subject=q.replace(/[’']/g,'').replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(word=>word&&!/^\d+$/.test(word)&&!noise.has(word));
+  if (subject.length) return null;
 
   const numeric = q.match(/(?:€\s*)?(\d{1,3}(?:[.,]\d{1,2})?)/);
   if (numeric) {

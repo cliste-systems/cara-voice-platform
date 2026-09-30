@@ -111,4 +111,16 @@ describe('text_rehearsal', () => {
     });
     assert.deepEqual(failures, []);
   });
+  it('does not mistake an unscoped tool call for a spoken clarification', () => {
+    assert.deepEqual(evaluateTextRehearsalExpectations({
+      assistantLines: ['There are beer and wine offers this week.'],
+      toolCalls: [{ name: 'searchSuperValuProducts', args: { query: 'alcohol offers', intent: 'offer' } }],
+      expect: { clarification: true },
+    }), ['expected clarification question']);
+    assert.deepEqual(evaluateTextRehearsalExpectations({
+      assistantLines: ['What sort of drinks were you after?'], toolCalls: [],
+      expect: { clarification: true, must_not_quote_prices: true },
+    }), []);
+    assert.equal(assistantReplyLooksLikeRetailFulfilmentClarification('Which were you after—milk, yogurt, butter or eggs?'), true);
+  });
 });

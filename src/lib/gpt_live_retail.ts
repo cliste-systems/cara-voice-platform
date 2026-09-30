@@ -33,7 +33,7 @@ export const GPT_LIVE_RETAIL_VOICE_DEFAULT = 'willow';
 const GPT_LIVE_RETAIL_BACKEND_DEFAULT = 'gpt-5.6-luna';
 
 /** Backend Responses model: writes what Cara says and runs the product lookup. */
-const GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS =
+export const GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS =
   'You write replies for Cara on the phone at a SuperValu in Donegal. ' +
   'Write plain conversational English without adding slang to imitate an accent; the voice model handles pronunciation. ' +
   'Short, one question at a time, times in words. ' +

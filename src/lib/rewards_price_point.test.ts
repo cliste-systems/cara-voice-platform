@@ -29,6 +29,9 @@ describe('Rewards price-point lookup', () => {
     assert.equal(inferRewardsPricePoint('Anything with Rewards at two fifty?'), 2.5);
     assert.equal(inferRewardsPricePoint('Any Real Rewards offers for two euro fifty?'), 2.5);
     assert.equal(inferRewardsPricePoint('two fifty'), null);
+    assert.equal(inferRewardsPricePoint('Kinetica Strawberry Protein Milkshake (330 ml) Rewards Price'), null);
+    assert.equal(inferRewardsPricePoint('Kinetica Strawberry Protein Milkshake (330 ml) Rewards Price Only €2.50'), null);
+    assert.equal(inferRewardsPricePoint('100 Real Rewards points'), null);
   });
 
   it('formats spoken euro prices for Cara', () => {
