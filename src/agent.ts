@@ -1,5 +1,6 @@
 import { createCallTranscriptJournal } from './lib/call_transcript_journal.js';
 import 'dotenv/config';
+import { ElevenLabsDemoTts, useElevenLabsDemo, ELEVEN_DEMO_MODEL, ELEVEN_DEMO_VOICE } from './lib/elevenlabs_demo_tts.js';
 
 import * as lkTurn from '@livekit/agents-plugin-livekit';
 import { createCaraLlm } from './lib/llm_provider.js';
@@ -595,12 +596,13 @@ export default defineAgent({
       (isConversationalRetailLine(calledNumber) ||
         isConversationalRetailLine(routing.phone) ||
         isConversationalRetailLine(org.phone_number));
-    const useGptLiveRetailStack = shouldUseGptLiveRetailStack({ conversationalRetailLine });
+    const elevenLabsAdminDemo = useElevenLabsDemo(ctx.job.metadata);
+    const useGptLiveRetailStack = !elevenLabsAdminDemo && shouldUseGptLiveRetailStack({ conversationalRetailLine });
     const gptLiveRetail = useGptLiveRetailStack ? createGptLiveRetailModel() : null;
     const activeGptLiveRetail = Boolean(gptLiveRetail);
     /** 9508 = LiveKit turn loop only; no agent.ts guard rails. */
     const bareLiveKitRetailLane = conversationalRetailLine;
-    const demoExperienceStack = shouldUseDemoExperienceStack({
+    const demoExperienceStack = elevenLabsAdminDemo || shouldUseDemoExperienceStack({
       testCall,
       factoryFreshLine,
       conversationalRetailLine,
@@ -693,7 +695,7 @@ export default defineAgent({
     const hasCallerIdOnFile =
       callerLine.kind !== 'unknown' && Boolean(callerLine.e164);
 
-    const ttsConfig = resolveTtsConfig({
+    const ttsConfig = elevenLabsAdminDemo ? {model: ELEVEN_DEMO_MODEL, voiceId: ELEVEN_DEMO_VOICE, language: 'en', label: `elevenlabs/${ELEVEN_DEMO_MODEL}:${ELEVEN_DEMO_VOICE}`} : resolveTtsConfig({
       testProfile,
       orgVoiceId: resolveOrgVoiceId(org),
     });
@@ -1159,12 +1161,12 @@ export default defineAgent({
           llm: resolvedLlm!.label,
           tts: ttsConfig.label,
           voiceId: activeVoiceId,
-          ttsProvider: 'cartesia-inference',
+          ttsProvider: elevenLabsAdminDemo ? 'elevenlabs-direct' : 'cartesia-inference',
           ...(endpointMinMs !== undefined ? { endpointMinMs } : {}),
           ...(endpointMaxMs !== undefined ? { endpointMaxMs } : {}),
         };
 
-    if (conversationalRetailLine) {
+    if (conversationalRetailLine && !elevenLabsAdminDemo) {
       assertExpectedStack(pipelineLabel);
     }
 
@@ -1215,7 +1217,9 @@ export default defineAgent({
 
     const sessionTts = activeGptLiveRetail
       ? null
-      : new inference.TTS({
+      : elevenLabsAdminDemo
+        ? new ElevenLabsDemoTts(process.env.ELEVEN_API_KEY?.trim() || process.env.ELEVENLABS_API_KEY?.trim() || '')
+        : new inference.TTS({
           model: ttsConfig.model,
           voice: ttsConfig.voiceId,
           language: ttsConfig.language,

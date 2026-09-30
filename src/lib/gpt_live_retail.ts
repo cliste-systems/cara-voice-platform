@@ -584,7 +584,17 @@ export function deliverGptLiveToolResult(
 ): void {
   const call = (ctx as { functionCall?: { callId?: string; name?: string } }).functionCall;
   const callId = call?.callId;
-  const duplex = ctx.session.currentAgent?.duplexSession as {
+  if (!callId) return;
+  let rawDuplex: unknown;
+  try {
+    rawDuplex = ctx.session.currentAgent?.duplexSession;
+  } catch (error) {
+    // LiveKit's getter throws for normal STT/LLM/TTS sessions. Their tool
+    // results are delivered by the framework; only duplex needs this hook.
+    if (error instanceof Error && /no duplex session/i.test(error.message)) return;
+    throw error;
+  }
+  const duplex = rawDuplex as {
     _appendItems?: (items: llm.ChatItem[]) => Promise<void>;
   } | undefined;
   if (!callId || typeof duplex?._appendItems !== 'function') return;
