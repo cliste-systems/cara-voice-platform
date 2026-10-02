@@ -1300,13 +1300,13 @@ export class CaraTools {
           verifiedSavingsQuote(match),
           match.current_price_eur === null ? 'No standalone single-item price is supplied. Only verified full-bundle totals may be quoted. If the requested count needs singles, do not prorate a bundle or invent a remainder price; say that requested total cannot be confirmed.' : '',
           match.is_on_offer === true && match.was_price_eur === null && match.current_price_eur !== null
-            ? 'No usual/was price is supplied for this item. The single price is a current listed price, not a historical usual price. A bundle saving may only be compared with buying the same quantity at that listed single price.' : '',
+            ? 'Describe the single price as the current listed price. No price history is supplied. A bundle saving may only be compared with buying the same quantity at that listed single price.' : '',
           match.offer_week_end && callerRequestsOfferDates(originalCallerQuery)
             ? (spokenVerifiedExpiry(match.offer_week_end)
               ? `Verified expiry for this exact product: ${spokenVerifiedExpiry(match.offer_week_end)}. Copy these date words exactly; do not add a weekday.`
               : 'No verified public expiry date is supplied. Do not quote an open-ended placeholder as a real offer expiry.') : '',
           /\brewards\b|\bloyalty\b|\bmembers?\b/i.test(match.discount_label ?? '')
-            ? 'Membership condition: this offer requires the stated Rewards membership. Never say the offer applies without it. A usual/was price is a reference price, not a verified current non-member shelf price.'
+            ? 'Membership condition: this offer requires the stated Rewards membership. Never say the offer applies without it.' + (match.was_price_eur!=null?' The supplied historical reference does not establish the current non-member shelf price.':'')
             : /\b(?:no|without)\b.*\b(?:rewards|card)\b|\b(?:qualify|eligib|conditions?|rewards|card)\b/i.test(originalCallerQuery)
               ? 'Card eligibility is unknown. Say that no Rewards condition is stated. Do not say cash is fine, no card is needed, or that this price applies without a card.' : '',
         ].filter(Boolean).join(' '))
@@ -1325,7 +1325,7 @@ export class CaraTools {
 
       const offerPrefix =
         resolvedIntent === 'offer'
-          ? 'Use only these current offer quotes. If a quote flags unverified eligibility or a conflicting flavour/pack, do not say that the requested item qualifies. Do not transfer a price to a different flavour or pack. Never speculate that a current conflicting listing is an old deal. For multibuys, state the quantity and total bundle price; never imply the bundle price is for one item. Preserve Rewards membership, mix-and-match, pack size, counter/pre-pack and date conditions. Mention a saving or usual price only when supplied. Only when the caller explicitly requested a rundown or examples, give a few useful examples across the requested scope; do not imply the examples are the entire offer range. Never quote offers from memory.'
+          ? 'Use only these current offer quotes. If a quote flags unverified eligibility or a conflicting flavour/pack, do not say that the requested item qualifies. Do not transfer a price to a different flavour or pack. Never speculate that a current conflicting listing is an old deal. For multibuys, state the quantity and total bundle price; never imply the bundle price is for one item. Preserve Rewards membership, mix-and-match, pack size, counter/pre-pack and date conditions. Use only supplied amounts. Price history must be explicitly requested and verified. Only when the caller explicitly requested a rundown or examples, give a few useful examples across the requested scope; do not imply the examples are the entire offer range. Never quote offers from memory.'
           : 'Keep every amount exact, including every cent, using the provided spoken price words. You may rephrase the surrounding sentence; never round prices. A national catalogue match confirms national range only; claim local availability only if the returned quote explicitly confirms it. Never quote offers from memory.';
 
       const freshnessNote = result.offersFreshness?.trim()

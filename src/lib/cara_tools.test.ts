@@ -90,6 +90,12 @@ describe('CaraTools current-offer lookup', () => {
     assert.match(result.message,/Card eligibility is unknown/);
     assert.match(result.message,/Do not say cash is fine, no card is needed/);
   });
+  it('current Rewards answers supply current amounts without unrelated price history', async () => {
+    const {result}=await lookup('Innocent Kids Super Smoothie Strawberry Burst 600 ml offer',{ok:true,matches:[{product_name:'Innocent Kids Super Smoothie Strawberry Burst (600 ml)',department:'Drinks',sku:'smoothie',score:1,is_on_offer:true,current_price_eur:4,was_price_eur:4.99,discount_label:'Rewards Price Only €4',quote_text:'Rewards Price Only four euro. Now four euro. Usually four euro ninety nine.'}]},[],undefined,{callerQuery:'How much is this smoothie on offer, and is that a Rewards price?'});
+    assert.doesNotMatch(result.message,/\busual(?:ly)?\b|ninety nine/i);
+    assert.match(result.message,/requires the stated Rewards membership/);
+    assert.match(result.message,/current listed price/);
+  });
 
   it('retains a verified alcohol-version choice when the follow-up only supplies pack size', async () => {
     const matches=[{product_name:'Guinness Draught 0.0% Can 8 Pack (500 ml)',department:'Beer',quote_text:'Listed nationally.',score:1,is_alcohol:false},{product_name:'Guinness Draught Stout Can 8 Pack (500 ml)',department:'Beer',quote_text:'Listed nationally.',score:1,is_alcohol:true}];
