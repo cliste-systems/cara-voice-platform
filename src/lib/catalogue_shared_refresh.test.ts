@@ -8,7 +8,7 @@ test('cancelling one caller does not abort a shared public catalogue refresh; pr
  try{
   const caller=new AbortController();
   const client=catalogueReadSignal.run(caller.signal,()=>createAdminClient());
-  await client.from('retail_weekly_offers').select('*').is('organization_id',null);
+  await client.from('retail_weekly_offers').select('*').eq('is_national',true);
   await client.from('retail_catalog_products').select('*').eq('is_national',true);
   await client.from('organizations').select('is_active').eq('id','test-org');
   caller.abort();

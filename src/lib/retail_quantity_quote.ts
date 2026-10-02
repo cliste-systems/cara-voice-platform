@@ -7,7 +7,9 @@ export function requestedPackTotalQuote(query:string,match:SearchSupervaluProduc
  const count=query.match(/\b(?:get|buy|take|for)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i)?.[1]?.toLowerCase();
  const n=count?(words[count]??Number(count)):0;
  const price=match.current_price_eur;
- if(!n||n>100||!price||match.fulfilment==='counter'||/not (?:confirmed|verified)|can(?:not|[’']t) confirm.*(?:appl|qualif)/i.test(match.quote_text))return '';
+ const packEvidence=match.quote_text.replace(/Eligibility to mix different products is not verified[^.]*\.?/gi,'');
+ const packConflict=/(?:pack|exact product).*?(?:eligib|qualif|appl).*?(?:unverified|not (?:confirmed|verified))|eligib.*?exact pack.*?(?:unverified|not (?:confirmed|verified))|can(?:not|[’']t) confirm.*(?:appl|qualif)/i.test(packEvidence);
+ if(!n||n>100||!price||match.fulfilment==='counter'||packConflict)return '';
  const bundle=parseRetailMultibuyLabel(match.discount_label);
  if(bundle&&(!bundle.quantity||!bundle.totalEur))return '';
  const cents=Math.round(price*100);const qty=bundle?.quantity;const bundleCents=bundle?.totalEur?Math.round(bundle.totalEur*100):0;

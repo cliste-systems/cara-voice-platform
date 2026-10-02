@@ -17,7 +17,14 @@ export function positiveRetailQuery(query: string): string {
 export function matchesRetailQueryConstraints(query: string, name: string, category = ""): boolean {
   const text = `${name} ${category}`.toLowerCase();
   const positive = positiveRetailQuery(query);
-  if (/\badult\b/i.test(query) && /\bdogs?\b/i.test(query) && /\bpuppy|puppies\b/i.test(name)) return false;
+  if (/\badult\b/i.test(query) && /\bdogs?\b/i.test(query) && (!/\badult\b/i.test(text) || /\b(?:puppy|puppies)\b/i.test(name))) return false;
+  if (/\bwhisk(?:e)?y\b/i.test(positive) && !/\bwhisk(?:e)?y\b/i.test(text)) return false;
+  if (/\bminiatures?\b/i.test(positive)) {
+    const volume=name.match(/\b(\d+(?:[.,]\d+)?)\s*(ml|cl|l)\b/i);
+    if(!volume)return false;
+    const ml=Number(volume[1]!.replace(",",".")) * ({ml:1,cl:10,l:1000}[volume[2]!.toLowerCase()] ?? 1);
+    if(ml>200)return false;
+  }
   if (/\bsmoked salmon\b/i.test(positive) && !/\bsmoked\b/i.test(text) || /\bsmoked salmon\b/i.test(positive) && !/\bsalmon\b/i.test(text)) return false;
   if (/\bgluten[- ]free\b/i.test(positive) && /\bbread\b/i.test(positive) && (!/\b(?:bread|crispbread|breadrolls?)\b/i.test(text) || /\bbreaded\b/i.test(name))) return false;
   if (/\bdogs?\b/i.test(positive) && /\b(?:dry|kibble)\b/i.test(query) && (!/\b(?:dogs?|canine)\b/i.test(text) || !/\b(?:dry|kibble)\b/i.test(text))) return false;

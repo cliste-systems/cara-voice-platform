@@ -942,6 +942,18 @@ export function formatWeeklyOfferQuote(input: {
   const channelPrefix = resolveOfferChannelPrefix(input);
   const sentences = [`${channelPrefix}. ${productName}.`];
 
+  const mass=(value:string)=>[...value.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)\b/gi)].map(m=>({dimension:/^(?:kg|g)$/i.test(m[2]!)?'mass':'volume',n:Number(m[1]!.replace(',','.'))*({kg:1000,g:1,ml:1,cl:10,l:1000}[m[2]!.toLowerCase()]??1)}));
+  const pack=mass(input.productName).at(-1);
+  const advertised=mass(input.discountLabel??'');
+  const packCount=Number(input.productName.match(/\b(\d+)\s*pack\b/i)?.[1]??1);
+  const comparable=advertised.filter(a=>a.dimension===pack?.dimension).map(a=>a.n);
+  const candidates=pack?[pack.n,pack.n*packCount]:[];
+  const weightConflict=comparable.length>0 && candidates.length>0 && !candidates.some(n=>comparable.some(x=>Math.abs(x-n)<0.01)||(/\d\s*(?:kg|g|ml|cl|l)?\s*[-–]\s*\d/i.test(input.discountLabel??'')&&n>=Math.min(...comparable)&&n<=Math.max(...comparable)));
+  if(weightConflict&&parseRetailMultibuyLabel(input.discountLabel)){
+    if(price)sentences.push(`Verified listed single price ${price}${perKilo?' per kilo':' each'}.`);
+    sentences.push(`The advertised promotion label refers to a different pack size or range: ${formatSpokenDiscountLabel(input.discountLabel)}. Eligibility for this exact pack is not verified. Do not present the requested pack as qualifying for that bundle.`);
+    return sentences.join(' ');
+  }
   const spokenLabel = formatSpokenDiscountLabel(input.discountLabel);
   const multibuyMatch = String(input.discountLabel ?? "").match(
     /\b(\d+)\s+for\s+€?\s*(\d+(?:[.,]\d{1,2})?)/i,

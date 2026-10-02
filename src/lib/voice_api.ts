@@ -108,6 +108,7 @@ function capTranscriptField(value: string | null | undefined): string | null | u
 
 function isFetchTimeoutError(err: unknown): boolean {
   if (err instanceof Error && ['AbortError','TimeoutError'].includes(err.name)) return true;
+  if (err instanceof Error && /^(?:AbortError|TimeoutError):/.test(err.message)) return true;
   return err instanceof DOMException && ['AbortError','TimeoutError'].includes(err.name);
 }
 
