@@ -10,6 +10,12 @@ export function createAdminClient() {
   return createClient(url,key,{auth:{autoRefreshToken:false,persistSession:false},global:{fetch:(input,init)=>{
     const headers=new Headers(init?.headers??(input instanceof Request?input.headers:undefined));
     headers.set('Connection','close');
-    return fetch(input,{...init,headers,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(8000)]):AbortSignal.timeout(8000)});
+    const requestUrl=new URL(input instanceof Request?input.url:String(input));
+    // A coalesced public refresh may serve several callers. Cancelling its
+    // first caller must not cancel the other callers' shared source read.
+    const publicRefresh=(requestUrl.pathname.endsWith('/retail_weekly_offers')&&requestUrl.searchParams.get('organization_id')==='is.null') ||
+      (requestUrl.pathname.endsWith('/retail_catalog_products')&&requestUrl.searchParams.get('is_national')==='eq.true');
+    const deadline=AbortSignal.timeout(8000);
+    return fetch(input,{...init,headers,signal:signal&&!publicRefresh?AbortSignal.any([signal,deadline]):deadline});
   }}});
 }
