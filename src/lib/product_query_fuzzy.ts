@@ -87,6 +87,8 @@ export function inferExplicitProductServiceArea(
   query: string,
 ): RetailProductServiceArea | undefined {
   const q = query.toLowerCase();
+  if (productQueryTokens(q).length > 3 && !/\b(?:department|section|aisle|counter|butcher|off[- ]licen[cs]e|fruit (?:and|&) veg|dairy wall)\b/.test(q) &&
+      !(/\b(?:stout|lager|guinness)\b/.test(q) && /\b(?:cans?|bottles?)\b/.test(q))) return undefined;
   const nonAlcoholFood =
     /wine\s+gums?|beer[-\s]+battered|cider\s+vinegar|wine\s+vinegar/.test(q);
 

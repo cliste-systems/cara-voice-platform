@@ -958,8 +958,7 @@ export class CaraTools {
         pendingRefinementClarification &&
         pendingProductQuery &&
         (!pendingState?.serviceArea || !(inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) || (inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) === pendingState.serviceArea) &&
-        productQueryTokens(trimmed).length > 0 &&
-        productQueryTokens(trimmed).length <= 3;
+        productQueryTokens(trimmed).length > 0;
       const originalCallerQuery = ud.sessionFlags.callerCatalogQuery ?? trimmed;
       const callerNappySizeRefinement = pendingRefinementClarification && pendingProductQuery &&
         /\b(?:napp(?:y|ies)|diapers?)\b/i.test(pendingProductQuery) &&
@@ -1274,7 +1273,8 @@ export class CaraTools {
 
       return finish({
         ok: true,
-        message: `${CARA_CLARIFICATION_POLICY}\n\n${comparisonGuidance}${freshnessNote}${offerPrefix}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        ...(result.recoveryUsed ? {lookup_recovered:true} : {}),
+        message: `${comparisonGuidance}${freshnessNote}${offerPrefix}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
       });
     },

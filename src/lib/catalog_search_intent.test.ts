@@ -124,3 +124,8 @@ describe('lowest-price follow-up regression', () => {
    trackCallerCatalogSearchIntent('actually a microwave burger', flags);
    assert.equal(flags.callerBarbecueCooking, false);
  });
+
+
+it('a 1.5 litre pack is not a request for five offer examples',()=>{
+  assert.equal(inferWeeklyOffersListIntent('Ballygowan Hint of Fruit Peach Bottle 1.5 L'),false);
+});

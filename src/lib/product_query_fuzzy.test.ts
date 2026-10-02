@@ -111,3 +111,11 @@ it('sealed packets exclude counters, while stout identifies the off licence', ()
   assert.equal(inferExplicitProductFulfilment('smoked salmon sealed packets rather than loose counter fish'), 'prepack');
   assert.equal(inferExplicitProductServiceArea('dark stout in cans anything is fine'), 'off_licence');
 });
+
+it('fruit inside a full bottled drink name does not scope it to produce',()=>{
+  assert.equal(inferExplicitProductServiceArea('Ballygowan Hint of Fruit Peach Bottle 1.5 L'),undefined);
+});
+
+it('Spirit in a named nicotine product is not an off-licence department request',()=>{
+  assert.equal(inferExplicitProductServiceArea('Nordic Spirit Raspberry Strong 9mg 1 Piece'),undefined);
+});

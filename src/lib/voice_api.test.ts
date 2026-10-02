@@ -99,7 +99,7 @@ test('catalogue lookups retry transient failures once without retrying invalid r
 });
 
 
-test('a healthy slower catalogue lookup can use its configured first-attempt budget', async (t) => {
+test('a healthy slower catalogue lookup retains its budget while starting one recovery read', async (t) => {
   const originalFetch=globalThis.fetch;const originalUrl=process.env.CLISTE_APP_URL;const originalSecret=process.env.CLISTE_VOICE_WEBHOOK_SECRET;const originalTimeout=process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS;
   process.env.CLISTE_APP_URL='https://lookup.invalid';process.env.CLISTE_VOICE_WEBHOOK_SECRET='test-lookup';process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS='12000';
   t.mock.timers.enable({apis:['setTimeout']});let calls=0;
@@ -110,9 +110,25 @@ test('a healthy slower catalogue lookup can use its configured first-attempt bud
   try {
     const response=postSearchSupervaluProducts({called_number:'test-line',query:'Verified product',intent:'offer'});
     t.mock.timers.tick(8000);
-    const result=await response;assert.equal(result.ok,true);assert.equal(calls,1);
+    const result=await response;assert.equal(result.ok,true);assert.equal(calls,2);
   } finally {
     t.mock.timers.reset();globalThis.fetch=originalFetch;
     for(const [key,value] of [['CLISTE_APP_URL',originalUrl],['CLISTE_VOICE_WEBHOOK_SECRET',originalSecret],['CLISTE_VOICE_HTTP_TIMEOUT_MS',originalTimeout]] as const) {if(value===undefined)delete process.env[key];else process.env[key]=value;}
+  }
+});
+
+test('an incomplete catalogue response is never interpreted as no matching offers',async()=>{
+  const originalFetch=globalThis.fetch;const originalUrl=process.env.CLISTE_APP_URL;const originalSecret=process.env.CLISTE_VOICE_WEBHOOK_SECRET;
+  process.env.CLISTE_APP_URL='https://lookup.invalid';process.env.CLISTE_VOICE_WEBHOOK_SECRET='test-lookup';let reads=0;
+  globalThis.fetch=async(_url,init)=>{
+    reads++;assert.equal(new Headers(init?.headers).get('Connection'),'close');
+    return new Response('{}');
+  };
+  try {
+    const result=await postSearchSupervaluProducts({called_number:'test-line',query:'meat offers',intent:'offer'});
+    assert.equal(result.ok,false);assert.match(result.error??'',/Invalid catalogue response/);assert.equal(reads,2);
+  }finally{
+    globalThis.fetch=originalFetch;
+    for(const [key,value]of [['CLISTE_APP_URL',originalUrl],['CLISTE_VOICE_WEBHOOK_SECRET',originalSecret]] as const){if(value===undefined)delete process.env[key];else process.env[key]=value;}
   }
 });

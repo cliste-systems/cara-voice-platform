@@ -97,7 +97,7 @@ function inferWeeklyOffersBrowseCategories(query: string): string[] {
   if (/\bapart from meat\b|\bnot meat\b|\bgrocery offers\b|\bnon[- ]meat\b/i.test(trimmed)) {
     return ['chocolate', 'crisps', 'yogurt', 'bread', 'fruit'];
   }
-  if (/\blist\b|\bfive\b|\b5\b|weekly offers|best deal|sample|highlights/i.test(trimmed)) {
+  if (/\blist\b|\b(?:show|give|choose|list)\s+(?:me\s+)?(?:five|5)\b|weekly offers|best deal|sample|highlights/i.test(trimmed)) {
     return ['chocolate', 'crisps', 'yogurt', 'bread', 'fruit'];
   }
   return [];

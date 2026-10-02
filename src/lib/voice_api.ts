@@ -1,3 +1,4 @@
+import { hedgedCatalogueRead } from './catalogue_recovery.js';
 import { redactPii } from './gdpr.js';
 
 const HTTP_FETCH_TIMEOUT_MS = Number.parseInt(
@@ -118,6 +119,7 @@ async function postVoiceWebhook<T>(
   path: string,
   payload: unknown,
   timeoutMsOverride?: number,
+  parentSignal?: AbortSignal,
 ): Promise<{ res: Response; body: T }> {
   const base = appBaseUrl();
   if (!base || !voiceSecret()) {
@@ -130,19 +132,23 @@ async function postVoiceWebhook<T>(
     : 6000;
 
   const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (parentSignal?.aborted) cancel();
+  parentSignal?.addEventListener('abort',cancel,{once:true});
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${base}${path}`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: {...authHeaders(), ...(path === '/api/voice/search-supervalu-products' ? {Connection:'close'} : {})},
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
 
-    const body = (await res.json().catch(() => ({}))) as T;
+    const body = (path === '/api/voice/search-supervalu-products' ? await res.json() : await res.json().catch(() => ({}))) as T;
     return { res, body };
   } finally {
     clearTimeout(timeoutId);
+    parentSignal?.removeEventListener('abort',cancel);
   }
 }
 
@@ -405,23 +411,28 @@ export type SearchSupervaluProductsMatch = {
   fulfilment?: string | null;
 };
 
-/** One bounded retry is safe for a read-only catalogue lookup, never for action webhooks. */
-async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPayload): Promise<{res: Response; body: T}> {
-  // Honour the configured first-attempt budget: two six-second attempts
-  // cannot complete an otherwise healthy eight-second cold lookup.
-  const configuredTimeout = Number.parseInt(process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS ?? String(HTTP_FETCH_TIMEOUT_MS),10);
-  const firstTimeout = Number.isFinite(configuredTimeout) ? Math.min(configuredTimeout,12_000) : 6000;
-  for (let attempt=0;attempt<2;attempt++) {
-    try {
-      const result=await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attempt===0 ? firstTimeout : Math.min(firstTimeout,6000));
-      if (attempt===0 && [502,503,504].includes(result.res.status)) continue;
-      return result;
-    } catch (error) {
-      const transient=error instanceof TypeError || (error instanceof Error && ['AbortError','TimeoutError'].includes(error.name));
-      if (attempt===1 || !transient) throw error;
-    }
+/** Recover a stalled read on a fresh connection; never hedge action webhooks. */
+async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPayload): Promise<{res: Response; body: T; recoveryUsed?: boolean}> {
+  const configured = Number.parseInt(process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS ?? String(HTTP_FETCH_TIMEOUT_MS),10);
+  const budget = Number.isFinite(configured) ? Math.min(configured,12_000) : 6000;
+  let failedResponse: {res:Response;body:T} | undefined;
+  try {
+    return await hedgedCatalogueRead(async (attempt,signal) => {
+      const result = await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attempt === 0 ? budget : Math.min(budget,6000),signal);
+      if ([502,503,504].includes(result.res.status)) {
+        failedResponse=result;
+        throw new TypeError(`Catalogue service HTTP ${result.res.status}`);
+      }
+      if (result.res.ok) {
+        const body=result.body as {ok?:boolean;matches?:unknown};
+        if (body.ok !== true || !Array.isArray(body.matches)) throw new TypeError('Invalid catalogue response');
+      }
+      return {...result,recoveryUsed:attempt===1};
+    }, error => error instanceof TypeError || (error instanceof Error && ['AbortError','TimeoutError','SyntaxError'].includes(error.name)));
+  } catch(error) {
+    if (failedResponse) return failedResponse;
+    throw error;
   }
-  throw new Error('Catalogue retry exhausted');
 }
 
 export async function postSearchSupervaluProducts(
@@ -433,6 +444,7 @@ export async function postSearchSupervaluProducts(
   noMatchQuote?: string | null;
   clarificationHint?: string | null;
   offersFreshness?: string | null;
+  recoveryUsed?: boolean;
   error?: string;
 }> {
   if (!voiceWebhooksConfigured()) {
@@ -440,7 +452,7 @@ export async function postSearchSupervaluProducts(
   }
 
   try {
-    const { res, body } = await postCatalogLookupWebhook<{
+    const { res, body, recoveryUsed } = await postCatalogLookupWebhook<{
       ok?: boolean;
       matches?: SearchSupervaluProductsMatch[];
       browse_categories?: string[] | null;
@@ -461,6 +473,7 @@ export async function postSearchSupervaluProducts(
     return {
       ok: true,
       matches: Array.isArray(body.matches) ? body.matches : [],
+      recoveryUsed: recoveryUsed === true,
       browseCategories: body.browse_categories ?? null,
       noMatchQuote: body.no_match_quote ?? null,
       clarificationHint:
