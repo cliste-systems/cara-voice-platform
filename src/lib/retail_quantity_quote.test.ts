@@ -23,3 +23,11 @@ test('unknown bundle terms, counter weights and conflicting pack eligibility can
  assert.equal(requestedPackTotalQuote('buy two wraps',{...match,discount_label:null,fulfilment:'counter'}),'');
  assert.equal(requestedPackTotalQuote('buy two wraps',{...match,discount_label:'2 for €2',quote_text:'The pack eligibility is not verified.'}),'');
 });
+
+test('complete bundles are calculable without inventing a missing standalone price',()=>{
+ const m={product_name:'Kit Kat',department:'Food',sku:'1',score:1,quote_text:'Two for two ninety',discount_label:'2 for €2.90',current_price_eur:null,fulfilment:'prepack'};
+ assert.match(requestedPackTotalQuote('pick up 2 packs',m),/two euro ninety altogether/);
+ assert.match(requestedPackTotalQuote('buy four packs',m),/five euro eighty altogether/);
+ assert.equal(requestedPackTotalQuote('buy three packs',m),'');
+ assert.equal(requestedPackTotalQuote('buy one pack',m),'');
+});

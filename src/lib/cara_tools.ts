@@ -913,7 +913,7 @@ export class CaraTools {
       query: z
         .string()
         .min(2)
-        .max(120)
+        .max(240)
         .describe(
           'Caller\'s product words or supported offer filter — e.g. "steak", "salmon darnes", "Skyr yogurt", "meat counter ham", "meat offers", "weekly offers", "household offers", "Super 7", "3 for 10", "Rewards 2.50"',
         ),
@@ -1001,7 +1001,7 @@ export class CaraTools {
         ? cookingQuery.replace(/\b(?:offers?|deals?|specials?|this week)\b/gi, ' ').replace(/\s+/g, ' ').trim()
         : cookingQuery;
       let lookupQuery = wantsLowestPrice && !callerRequestsLowestPrice(comparisonQuery)
-        ? `cheapest ${comparisonQuery}`.slice(0, 120) : namedPackLookupQuery(comparisonQuery);
+        ? `cheapest ${comparisonQuery}`.slice(0, 240) : namedPackLookupQuery(comparisonQuery);
       const callerAlcoholWords=(ud.sessionFlags.callerCatalogHistory??[originalCallerQuery]).join(' ');
       if (/\b(?:guinness|beer|lager|stout|cider)\b/i.test(lookupQuery) &&
           !/\b(?:regular|normal|alcoholic|zero|non[- ]?alcoholic|alcohol[- ]free|no alcohol)\b|0[.,]0/i.test(callerAlcoholWords)) {
@@ -1289,8 +1289,8 @@ export class CaraTools {
           requestedPackTotalQuote(originalCallerQuery,match),
           requestedCounterWeightQuote(originalCallerQuery,match),
           verifiedSavingsQuote(match),
-          match.current_price_eur === null ? 'The requested quantity has no verified standalone total. Answer that you cannot confirm its total. Never prorate a bundle, even conditionally, or propose an illustrative total below the bundle minimum.' : '',
-          match.is_on_offer === true && match.was_price_eur === null
+          match.current_price_eur === null ? 'No standalone single-item price is supplied. Only verified full-bundle totals may be quoted. If the requested count needs singles, do not prorate a bundle or invent a remainder price; say that requested total cannot be confirmed.' : '',
+          match.is_on_offer === true && match.was_price_eur === null && match.current_price_eur !== null
             ? 'No usual/was price is supplied for this item. The single price is a current listed price, not a historical usual price. A bundle saving may only be compared with buying the same quantity at that listed single price.' : '',
           match.offer_week_end && callerRequestsOfferDates(originalCallerQuery)
             ? (spokenVerifiedExpiry(match.offer_week_end)

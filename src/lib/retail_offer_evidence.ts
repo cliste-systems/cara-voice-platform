@@ -40,6 +40,8 @@ export function conflictingOfferVariant(name:string,label:string):boolean {
  return families.some(f=>{const requested=f.filter(v=>has(product,v));const advertised=f.filter(v=>has(terms,v));return requested.length>0&&advertised.length>0&&!requested.some(v=>advertised.includes(v));});
 }
 export function guardOfferEvidence(match:SearchSupervaluProductsMatch):SearchSupervaluProductsMatch {
+ const spoken=(text:string)=>text.replace(/\bSV\s*(?:&|and)\s*CT\b/gi,'SuperValu');
+ match={...match,...(match.discount_label!==undefined?{discount_label:match.discount_label===null?null:spoken(match.discount_label)}:{}),quote_text:spoken(match.quote_text)};
  const sourcePackConflict=/Eligibility for this exact pack is not verified/i.test(match.quote_text);
  if(!match.discount_label||(!sourcePackConflict&&!conflictingOfferVariant(match.product_name,match.discount_label)))return match;
  const price=match.current_price_eur;

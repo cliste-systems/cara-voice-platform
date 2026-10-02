@@ -94,6 +94,13 @@ describe('CaraTools current-offer lookup', () => {
     assert.deepEqual(result.matches,[]);
   });
 
+  it('accepts the observed long savings question without truncating the named product', () => {
+    const query='What is the saving on Prepared By Our Butcher Chicken Fillets with Garlic, Herb & Lemon Crumb 1 Piece compared with two packs at the listed single price?';
+    assert.ok(query.length>120);
+    const params=new CaraTools().searchSuperValuProducts.parameters as unknown as {parse(value:unknown):{query:string}};
+    assert.equal(params.parse({query,intent:'offer'}).query,query);
+  });
+
   it('asks for nappy size before listing and does not inherit an assistant-suggested brand', async () => {
     const {requests,result}=await lookup('Pampers nappies',{ok:true,matches:[{product_name:'Huggies Size 2',quote_text:'Eight euro.',score:1}]},[],'Pampers Baby Dry nappies Size 2',{callerQuery:'Nappies please',followUpCallerQuery:'Size two'});
     assert.equal(requests.length,1);

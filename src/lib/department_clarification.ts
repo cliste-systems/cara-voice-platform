@@ -4,7 +4,7 @@ const DEPARTMENTS = new Set([
   'meat', 'butcher', 'butchers', 'deli', 'delicatessen', 'fish', 'seafood',
   'bakery', 'dairy', 'produce', 'fruit', 'veg', 'vegetables', 'fruit veg', 'fruit vegetables',
   'frozen', 'frozen food', 'household', 'cleaning', 'baby', 'baby care', 'pet', 'pets', 'pet food',
-  'health', 'beauty', 'health beauty', 'personal care', 'grocery', 'groceries', 'food cupboard',
+  'toiletries', 'personal hygiene', 'cosmetics', 'health', 'beauty', 'health beauty', 'personal care', 'grocery', 'groceries', 'food cupboard',
   'ambient', 'confectionery', 'snacks', 'chilled', 'wine', 'beer', 'spirits',
   'fruit vegetables', 'meat poultry', 'fish seafood', 'deli counter', 'cheese',
   'milk yogurt butter eggs', 'milk yoghurt butter eggs', 'health wellness',

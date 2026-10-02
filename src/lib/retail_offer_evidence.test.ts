@@ -32,3 +32,9 @@ test('contradictory pizza styles and enumerated yogurt flavours cannot inherit b
  const guarded=guardOfferEvidence({product_name:'Deep Pan Pizza',department:'Frozen',sku:'1',score:1,quote_text:'two for six euro',current_price_eur:3.25,discount_label:'2 for €6 Thin Pizza',is_on_offer:true});
  assert.equal(guarded.is_on_offer,false);assert.equal(guarded.discount_label,null);assert.match(guarded.quote_text,/Eligibility for this exact product is not verified/);assert.doesNotMatch(guarded.quote_text,/two for six/);
 });
+
+test('retailer codes are removed from both model-visible promotion fields',()=>{
+ const result=guardOfferEvidence({product_name:'Nappies',department:'Baby',sku:'1',score:1,discount_label:'2 for €28 SV & CT Pampers Jumbo',quote_text:'Two for twenty eight euro SV and CT Pampers Jumbo.'});
+ assert.equal(result.discount_label,'2 for €28 SuperValu Pampers Jumbo');
+ assert.doesNotMatch(result.quote_text,/SV.*CT/);
+});
