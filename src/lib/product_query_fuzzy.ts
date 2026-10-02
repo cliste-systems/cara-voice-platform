@@ -68,6 +68,7 @@ export function inferExplicitProductFulfilment(
   query: string,
 ): RetailProductFulfilment | undefined {
   const q = query.toLowerCase();
+  if (/sealed (?:packets|packs)|\b(?:not|rather than|without)\b.*\bcounter\b/i.test(query)) return 'prepack';
   if (
     /pre\s*-?\s*pack|packaged|meat aisle|fish aisle|chilled aisle|chilled pack|in the aisle|on the shelf|shelf pack/.test(q)
   ) {
@@ -92,7 +93,7 @@ export function inferExplicitProductServiceArea(
   const areas = new Set<RetailProductServiceArea>();
   const departmentBrowse = inferWeeklyOffersListIntent(q);
   if (/\b(?:apart from|except|excluding|not|non[- ])\s*(?:meat|butcher|dairy|fish|deli|produce|bakery)\b/.test(q)) return undefined;
-  if (!nonAlcoholFood && (/\balcohol\s+(?:department|section|offers?|deals?)\b|^alcohol$|\boff[-\s]?licen[cs]e\b|\b(?:wines?|beer)\s+(?:aisle|section|offers?|deals?|specials?)\b|\b(?:wines?|beer)\s+on\s+offer\b|\bguinness\b|\bspirits?\b/.test(q) || (departmentBrowse && /\b(?:wines?|beer)\b/.test(q)))) {
+  if (!nonAlcoholFood && (/\balcohol\s+(?:department|section|offers?|deals?)\b|^alcohol$|\boff[-\s]?licen[cs]e\b|\b(?:wines?|beer)\s+(?:aisle|section|offers?|deals?|specials?)\b|\b(?:wines?|beer)\s+on\s+offer\b|\b(?:guinness|stout|lager)\b|\bspirits?\b/.test(q) || (departmentBrowse && /\b(?:wines?|beer)\b/.test(q)))) {
     areas.add('off_licence');
   }
   if ((departmentBrowse && /\bdairy\b/.test(q)) || /\bdairy\s+(?:wall|section|offers?|deals?|specials?|department)\b|^dairy$|\bfresh\s+milk\s+(?:wall|section)\b/.test(q)) {

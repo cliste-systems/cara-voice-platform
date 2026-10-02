@@ -110,6 +110,11 @@ export function trackCallerCatalogSearchIntent(
   flags.callerCatalogHistory = [...(flags.callerCatalogHistory ?? []),text].slice(-4);
   flags.callerCatalogQuery = text;
   const t = text.toLowerCase();
+  if (/\b(?:forget|new question|instead|actually)\b/i.test(text)) {
+    Object.assign(flags, {pendingProductSearchState: undefined, pendingProductLookupQuery: undefined,
+      pendingProductFulfilmentClarification: false, pendingProductRefinementClarification: false,
+      callerWantsLowestPrice: false, callerLowestPriceOffersOnly: false, callerBarbecueCooking: false, callerMeatPreference: false});
+  }
   if (/\b(?:vegetarian|vegan|meat[- ]free|plant[- ]based)\b/i.test(text)) flags.callerMeatPreference = false;
   else if (/\bmeat\b/i.test(text)) flags.callerMeatPreference = true;
   // Keep the intended preparation across "burgers" / "what is cheapest" follow-ups.

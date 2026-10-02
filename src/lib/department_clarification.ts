@@ -15,7 +15,7 @@ const FILLER = new Set(('i im was just wondering hello hi there do you ye have g
 export function departmentClarification(query: string): string | null {
   const q = query.toLowerCase().replace(/[’']/g, '').replace(/off[- ]licen[cs]e/g,'off licence');
   // An explicit invitation to choose examples is different from "any offers?".
-  if (/\b(?:surprise me|anything is fine|whatever you recommend|a few examples|some examples|give me a selection|show me a selection|all departments|every department|whole shop|all.shop rundown)\b/.test(q)) return null;
+  if (/\b(?:surprise me|anything is fine|whatever you recommend|(?:a few|some|offer|verified|two|three|couple of) examples|choose.*examples|give me a selection|show me a selection|all departments|every department|whole shop|all.shop rundown)\b/.test(q)) return null;
   if (/\b(?:super\s*(?:7|seven|fresh\s*5)|rewards.*(?:€|\d)|\d+\s+for\s+\d+)\b/.test(q)) return null;
   const words=q.replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean).filter(w=>!FILLER.has(w));
   const subject=words.join(' ');

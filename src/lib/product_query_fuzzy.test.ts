@@ -105,3 +105,9 @@ describe('department offer scope', () => {
     assert.equal(inferExplicitProductFulfilment(query), 'counter');
   });
 });
+
+
+it('sealed packets exclude counters, while stout identifies the off licence', () => {
+  assert.equal(inferExplicitProductFulfilment('smoked salmon sealed packets rather than loose counter fish'), 'prepack');
+  assert.equal(inferExplicitProductServiceArea('dark stout in cans anything is fine'), 'off_licence');
+});

@@ -963,9 +963,9 @@ export class CaraTools {
       const originalCallerQuery = ud.sessionFlags.callerCatalogQuery ?? trimmed;
       const callerNappySizeRefinement = pendingRefinementClarification && pendingProductQuery &&
         /\b(?:napp(?:y|ies)|diapers?)\b/i.test(pendingProductQuery) &&
-        /^(?:size\s+(?:[0-9]+\+?|one|two|three|four|five|six|seven|eight)(?:\s+plus)?|newborn|premature)[.!]?$/i.test(originalCallerQuery.trim());
-      const sizeWords: Record<string, string> = {one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8'};
-      const nappySizeQuery = originalCallerQuery.replace(/\b(one|two|three|four|five|six|seven|eight)\b/gi, word => sizeWords[word.toLowerCase()] ?? word).replace(/\s+plus\b/gi,"+");
+        /^(?:size\s+(?:[0-9]+\+?|one|two|three|four|five|six|seven|eight|nine)(?:\s+plus)?|newborn|premature)[.!]?$/i.test(originalCallerQuery.trim());
+      const sizeWords: Record<string, string> = {one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9'};
+      const nappySizeQuery = originalCallerQuery.replace(/\b(one|two|three|four|five|six|seven|eight|nine)\b/gi, word => sizeWords[word.toLowerCase()] ?? word).replace(/\s+plus\b/gi,"+");
       const baseLookupQuery = callerNappySizeRefinement
         ? `${pendingProductQuery} ${nappySizeQuery}`
         : callerOnlyChoseFulfilment && pendingProductQuery
@@ -999,16 +999,18 @@ export class CaraTools {
       // Every service area is a hard filter. Only accept caller-grounded scope;
       // guessed bakery/dairy/grocery hints can hide free-from or other products.
       const groundedEarlierChoice = modelServiceArea &&
-        productQueryTokens(originalCallerQuery).length <= 3 &&
         !/\b(?:actually|forget|instead|rather|what about)\b/i.test(originalCallerQuery) &&
         (ud.sessionFlags.callerCatalogHistory ?? []).slice(0,-1).some(text => inferExplicitProductServiceArea(text) === modelServiceArea);
       const groundedModelServiceArea = !queryServiceArea && !callerServiceArea && !groundedEarlierChoice
         ? undefined : modelServiceArea;
       // A comparison must span packs and counters unless the caller/query scoped it.
       // Backend models sometimes fill optional fields with guessed grocery/prepack defaults.
+      const groundedModelFulfilment = fulfilment &&
+        (ud.sessionFlags.callerCatalogHistory ?? []).some(text => inferExplicitProductFulfilment(text) === fulfilment)
+        ? fulfilment : undefined;
       const effectiveFulfilment: RetailProductFulfilment | undefined =
         callerFulfilment ?? queryFulfilment ??
-        (wantsLowestPrice ? undefined : fulfilment) ??
+        (wantsLowestPrice ? undefined : groundedModelFulfilment) ??
         ((pendingFulfilmentClarification || callerProvidedRefinement)
           ? wantsLowestPrice ? inferExplicitProductFulfilment(pendingProductQuery ?? '') : pendingState?.fulfilment
           : undefined);
@@ -1038,7 +1040,7 @@ export class CaraTools {
         ? originalCallerQuery : lookupQuery;
       const missingNappySize = /\b(?:napp(?:y|ies)|diapers?)\b/i.test(callerNappiesQuery) &&
         !/\b(?:rash|cream|bags?|sacks?|bins?|disposal)\b/i.test(callerNappiesQuery) &&
-        !/\b(?:size\s*(?:[0-9]+|one|two|three|four|five|six|seven|eight)|newborn|premature)\b/i.test(callerNappiesQuery) &&
+        !/\b(?:size\s*(?:[0-9]+|one|two|three|four|five|six|seven|eight|nine)|newborn|premature)\b/i.test(callerNappiesQuery) &&
         !/\b(?:examples?|any size|all sizes|rundown)\b/i.test(originalCallerQuery);
       const broadQuestion = missingNappySize ? 'What size nappies do you need?' : departmentClarification(lookupQuery);
       if (broadQuestion && rewardsPricePoint == null) {
