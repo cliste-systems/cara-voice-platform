@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  NODE_OPTIONS: --dns-result-order=ipv4first
+
 permissions:
   contents: read
 

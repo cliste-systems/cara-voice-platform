@@ -9,6 +9,7 @@ RUN apt-get update -qq \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 
 FROM base AS build
 WORKDIR /app

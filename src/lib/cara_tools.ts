@@ -1256,6 +1256,8 @@ export class CaraTools {
         .map((match) => [match.quote_text.trim(),
           requestedPackTotalQuote(originalCallerQuery,match),
           match.current_price_eur === null ? 'No verified standalone price is supplied. Do not calculate a total below the advertised bundle minimum.' : '',
+          match.is_on_offer === true && match.was_price_eur === null
+            ? 'No usual/was price is supplied for this item. The single price is a current listed price, not a historical usual price. A bundle saving may only be compared with buying the same quantity at that listed single price.' : '',
           match.offer_week_end ? `Verified expiry for this exact product: ${match.offer_week_end}.` : '',
           /\brewards\b|\bloyalty\b|\bmembers?\b/i.test(match.discount_label ?? '')
             ? 'Membership condition: this offer requires the stated Rewards membership. Never say the offer applies without it. A usual/was price is a reference price, not a verified current non-member shelf price.'
@@ -1283,7 +1285,7 @@ export class CaraTools {
       return finish({
         ok: true,
         ...(result.recoveryUsed ? {lookup_recovered:true} : {}),
-        message: `${comparisonGuidance}${freshnessNote}${offerPrefix}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        message: `${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
       });
     },

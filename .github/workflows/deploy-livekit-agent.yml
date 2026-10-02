@@ -9,6 +9,9 @@ concurrency:
   group: livekit-agent-deploy
   cancel-in-progress: true
 
+env:
+  NODE_OPTIONS: --dns-result-order=ipv4first
+
 permissions:
   contents: read
 

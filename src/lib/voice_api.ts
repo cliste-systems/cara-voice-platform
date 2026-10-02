@@ -1,6 +1,9 @@
 import {readCatalogueDirect,directCatalogueRecoveryConfigured} from './catalogue_direct_recovery.js';
+import {preferReliableDnsOrder} from './network_connectivity.js';
 import { hedgedCatalogueRead } from './catalogue_recovery.js';
 import { redactPii } from './gdpr.js';
+
+preferReliableDnsOrder();
 
 const HTTP_FETCH_TIMEOUT_MS = Number.parseInt(
   process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS ?? '6000',
