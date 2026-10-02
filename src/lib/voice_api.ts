@@ -407,10 +407,13 @@ export type SearchSupervaluProductsMatch = {
 
 /** One bounded retry is safe for a read-only catalogue lookup, never for action webhooks. */
 async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPayload): Promise<{res: Response; body: T}> {
-  const attemptTimeout = Number.isFinite(HTTP_FETCH_TIMEOUT_MS) ? Math.min(HTTP_FETCH_TIMEOUT_MS,6000) : 6000;
+  // Honour the configured first-attempt budget: two six-second attempts
+  // cannot complete an otherwise healthy eight-second cold lookup.
+  const configuredTimeout = Number.parseInt(process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS ?? String(HTTP_FETCH_TIMEOUT_MS),10);
+  const firstTimeout = Number.isFinite(configuredTimeout) ? Math.min(configuredTimeout,12_000) : 6000;
   for (let attempt=0;attempt<2;attempt++) {
     try {
-      const result=await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attemptTimeout);
+      const result=await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attempt===0 ? firstTimeout : Math.min(firstTimeout,6000));
       if (attempt===0 && [502,503,504].includes(result.res.status)) continue;
       return result;
     } catch (error) {

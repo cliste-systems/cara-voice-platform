@@ -97,3 +97,22 @@ test('catalogue lookups retry transient failures once without retrying invalid r
     }
   } finally {globalThis.fetch=originalFetch;if(originalUrl===undefined)delete process.env.CLISTE_APP_URL;else process.env.CLISTE_APP_URL=originalUrl;if(originalSecret===undefined)delete process.env.CLISTE_VOICE_WEBHOOK_SECRET;else process.env.CLISTE_VOICE_WEBHOOK_SECRET=originalSecret;}
 });
+
+
+test('a healthy slower catalogue lookup can use its configured first-attempt budget', async (t) => {
+  const originalFetch=globalThis.fetch;const originalUrl=process.env.CLISTE_APP_URL;const originalSecret=process.env.CLISTE_VOICE_WEBHOOK_SECRET;const originalTimeout=process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS;
+  process.env.CLISTE_APP_URL='https://lookup.invalid';process.env.CLISTE_VOICE_WEBHOOK_SECRET='test-lookup';process.env.CLISTE_VOICE_HTTP_TIMEOUT_MS='12000';
+  t.mock.timers.enable({apis:['setTimeout']});let calls=0;
+  globalThis.fetch=async (_url,init)=>new Promise((resolve,reject)=>{
+    calls++;init?.signal?.addEventListener('abort',()=>reject(new DOMException('Timed out','AbortError')),{once:true});
+    setTimeout(()=>resolve(new Response(JSON.stringify({ok:true,matches:[{product_name:'Verified product'}]}))),8000);
+  });
+  try {
+    const response=postSearchSupervaluProducts({called_number:'test-line',query:'Verified product',intent:'offer'});
+    t.mock.timers.tick(8000);
+    const result=await response;assert.equal(result.ok,true);assert.equal(calls,1);
+  } finally {
+    t.mock.timers.reset();globalThis.fetch=originalFetch;
+    for(const [key,value] of [['CLISTE_APP_URL',originalUrl],['CLISTE_VOICE_WEBHOOK_SECRET',originalSecret],['CLISTE_VOICE_HTTP_TIMEOUT_MS',originalTimeout]] as const) {if(value===undefined)delete process.env[key];else process.env[key]=value;}
+  }
+});

@@ -38,7 +38,7 @@ describe('CaraTools current-offer lookup', () => {
     response: Record<string, unknown>,
     replies: Record<string, unknown>[] = [],
     followUp?: string,
-    scope: {service_area?: "grocery"; fulfilment?: "prepack"; callerQuery?: string; followUpCallerQuery?: string} = {},
+    scope: {service_area?: "grocery"|"bakery"|"dairy"; fulfilment?: "prepack"; callerQuery?: string; followUpCallerQuery?: string} = {},
   ) {
     const requests: Array<Record<string, unknown>> = [];
     const previousFetch = globalThis.fetch;
@@ -97,6 +97,13 @@ describe('CaraTools current-offer lookup', () => {
     for(const query of ['nappy rash cream','Pampers nappies size 2']) {
       const {requests}=await lookup(query,{ok:true,matches:[{product_name:query,quote_text:'Eight euro.',score:1}]});
       assert.equal(requests.length,1,query);
+    }
+  });
+
+  it('does not hard-scope a named free-from product to a guessed dairy or bakery area', async () => {
+    for(const [query,area] of [['Alpro Soya High Protein Chocolate Drink (1 L)','dairy'],['gluten free bread','bakery']] as const) {
+      const {requests}=await lookup(query,{ok:true,matches:[{product_name:query,quote_text:'Current offer.',score:1}]},[],undefined,{service_area:area,callerQuery:`Any offer on ${query}?`});
+      assert.equal(requests[0]?.service_area,undefined);
     }
   });
 

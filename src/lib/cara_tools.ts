@@ -119,6 +119,7 @@ export type CaraSessionFlags = {
   callerMeatPreference?: boolean;
   /** Latest original caller words, used to distinguish explicit scope from model defaults. */
   callerCatalogQuery?: string;
+  callerCatalogHistory?: string[];
   /** Exact Rewards/Real Rewards price point from the latest caller turn. */
   rewardsPricePoint?: number | null;
   /** One-time alcohol age reminder already given this call. */
@@ -995,9 +996,13 @@ export class CaraTools {
         ? inferExplicitProductFulfilment(ud.sessionFlags.callerCatalogQuery) : undefined;
       const callerServiceArea = ud.sessionFlags.callerCatalogQuery
         ? inferExplicitProductServiceArea(ud.sessionFlags.callerCatalogQuery) : undefined;
-      // "grocery" is a real narrow department, not the default for a packaged
-      // product. A guessed default hid chicken, steak and other departments.
-      const groundedModelServiceArea = modelServiceArea === 'grocery' && !queryServiceArea && !callerServiceArea
+      // Every service area is a hard filter. Only accept caller-grounded scope;
+      // guessed bakery/dairy/grocery hints can hide free-from or other products.
+      const groundedEarlierChoice = modelServiceArea &&
+        productQueryTokens(originalCallerQuery).length <= 3 &&
+        !/\b(?:actually|forget|instead|rather|what about)\b/i.test(originalCallerQuery) &&
+        (ud.sessionFlags.callerCatalogHistory ?? []).slice(0,-1).some(text => inferExplicitProductServiceArea(text) === modelServiceArea);
+      const groundedModelServiceArea = !queryServiceArea && !callerServiceArea && !groundedEarlierChoice
         ? undefined : modelServiceArea;
       // A comparison must span packs and counters unless the caller/query scoped it.
       // Backend models sometimes fill optional fields with guessed grocery/prepack defaults.
