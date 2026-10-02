@@ -1,6 +1,6 @@
 import {requestedPackTotalQuote,requestedCounterWeightQuote,verifiedSavingsQuote} from './retail_quantity_quote.js';
 import {namedPackLookupQuery,counterWeightLookupQuery,mergeProductRefinement} from './retail_lookup_query.js';
-import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor} from './retail_offer_evidence.js';
+import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence} from './retail_offer_evidence.js';
 import {callerRequestsOfferDates,spokenVerifiedExpiry,historicalOfferGuidance,ambiguousHistoricalOfferGuidance} from './retail_offer_expiry.js';
 import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
 import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
@@ -1280,7 +1280,7 @@ export class CaraTools {
 
       ud.sessionFlags.callerWantsLowestPrice = false;
       ud.sessionFlags.callerLowestPriceOffersOnly = false;
-      result.matches = spokenOfferMatches(result.matches.map(guardOfferEvidence),originalCallerQuery);
+      result.matches = spokenOfferMatches(result.matches.map(guardOfferEvidence).map(match=>requestedPriceEvidence(match,originalCallerQuery)),originalCallerQuery);
       const rangeOnly=(!resolvedIntent||resolvedIntent==='stock')&&!/\b(?:price|cost|how much|offers?|deals?|reduced|saving|rewards|multibuys?)\b/i.test(originalCallerQuery);
       if(rangeOnly)result.matches=result.matches.map(match=>{
         const rangeMatch={...match};

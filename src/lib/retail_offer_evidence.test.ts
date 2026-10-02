@@ -1,5 +1,11 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {conflictingOfferVariant,guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor} from './retail_offer_evidence.js';
+import {conflictingOfferVariant,guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence} from './retail_offer_evidence.js';
+test('current Rewards price questions do not expose an unrequested historical price',()=>{
+ const m={product_name:'Smoothie',department:'Drinks',sku:'1',score:1,current_price_eur:4,was_price_eur:4.99,discount_label:'Rewards Price Only €4',quote_text:'Rewards Price Only four euro. Now four euro. Usually four euro ninety nine. Local stock unconfirmed.'};
+ const result=requestedPriceEvidence(m,'How much is this on offer, and is it a Rewards price?');
+ assert.equal(result.was_price_eur,null);assert.equal(result.current_price_eur,4);assert.equal(result.discount_label,m.discount_label);assert.doesNotMatch(result.quote_text,/ninety nine|Usually/);assert.match(result.quote_text,/Local stock unconfirmed/);
+ for(const q of ['What was the usual price?', 'How much am I saving?', 'Compare it with the previous price'])assert.deepEqual(requestedPriceEvidence(m,q),m);
+});
 test('White Grenache in the rose category cannot win a white-wine comparison',()=>{
  const m={product_name:'Gallo Family White Grenache',department:'Rose',sku:'1',score:1,quote_text:'Listed'};
  assert.equal(matchesRequestedWineColor('cheapest white wine, no red wine',m),false);

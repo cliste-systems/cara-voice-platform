@@ -33,6 +33,11 @@ export function matchesRequestedDietLabel(query:string,match:SearchSupervaluProd
 export function spokenOfferMatches<T>(matches:T[],query:string):T[] {
  return /\b(?:full list|all (?:the )?(?:offers|products|items)|every (?:offer|product|item))\b/i.test(query)?matches:matches.slice(0,3);
 }
+/** Keep current-price questions free of unrequested historical reference prices. */
+export function requestedPriceEvidence(match:SearchSupervaluProductsMatch,query:string):SearchSupervaluProductsMatch {
+ if(/\b(?:saving|savings|save|was|usual|usually|normally|previous|original|reference|compare|compared|comparison|difference)\b|\breduced from\b/i.test(query))return match;
+ return {...match,was_price_eur:null,quote_text:match.quote_text.replace(/\bUsually [^.]+(?:\.|$)/gi,'').replace(/\s{2,}/g,' ').trim()};
+}
 export function conflictingOfferVariant(name:string,label:string):boolean {
  const normalize=(s:string)=>s.toLowerCase().replace(/[-/]/g,' ').replace(/0%\s*/g,'').replace(/\s+/g,' ');
  const product=normalize(name),terms=normalize(label);
