@@ -248,7 +248,10 @@ export async function searchNationalRetailCatalog(
   if (tokens.length === 0) return [];
 
   const productTokens = productSearchTokens(input.query);
-  const candidateSource = productTokens.length > 0 ? productTokens : tokens;
+  const nameTokens = productTokens.filter(token => !/^(?:\d+(?:[.,]\d+)?|ml|cl|l|litres?|liters?|g|kg|grams?|kilograms?)$/i.test(token));
+  // Bare measurements are constraints, not names: scanning every "ml" product
+  // adds thousands of irrelevant rows after a named product already failed.
+  const candidateSource = nameTokens.length > 0 ? nameTokens : tokens;
   const candidateTokens = [...candidateSource]
     .map((token) => token.replace(/s$/, ""))
     .filter(Boolean)
