@@ -107,8 +107,8 @@ function capTranscriptField(value: string | null | undefined): string | null | u
 }
 
 function isFetchTimeoutError(err: unknown): boolean {
-  if (err instanceof Error && err.name === 'AbortError') return true;
-  return err instanceof DOMException && err.name === 'AbortError';
+  if (err instanceof Error && ['AbortError','TimeoutError'].includes(err.name)) return true;
+  return err instanceof DOMException && ['AbortError','TimeoutError'].includes(err.name);
 }
 
 function webhookFetchError(err: unknown): string {
@@ -426,7 +426,7 @@ async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPaylo
   try {
     return await hedgedCatalogueRead(async (attempt,signal) => {
       const result = attempt===1 && directCatalogueRecoveryConfigured()
-        ? await readCatalogueDirect<T>(payload,AbortSignal.any([signal,AbortSignal.timeout(6000)]))
+        ? await readCatalogueDirect<T>(payload,AbortSignal.any([signal,AbortSignal.timeout(8000)]))
         : await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attempt === 0 ? budget : Math.min(budget,6000),signal);
       if ([500,502,503,504].includes(result.res.status)) {
         failedResponse=result;
