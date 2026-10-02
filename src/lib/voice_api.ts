@@ -1,3 +1,4 @@
+import {readCatalogueDirect,directCatalogueRecoveryConfigured} from './catalogue_direct_recovery.js';
 import { hedgedCatalogueRead } from './catalogue_recovery.js';
 import { redactPii } from './gdpr.js';
 
@@ -355,6 +356,7 @@ export type SearchWeeklyOffersMatch = {
   price_per_unit: string | null;
   score: number;
   quote_text: string;
+
 };
 
 async function postSearchWeeklyOffers(
@@ -405,6 +407,11 @@ export type SearchSupervaluProductsMatch = {
   sku: string | null;
   score: number;
   quote_text: string;
+  offer_week_start?: string | null;
+  offer_week_end?: string | null;
+  discount_label?: string | null;
+  current_price_eur?: number | null;
+  was_price_eur?: number | null;
   is_on_offer?: boolean;
   is_alcohol?: boolean;
   service_area?: string | null;
@@ -418,8 +425,10 @@ async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPaylo
   let failedResponse: {res:Response;body:T} | undefined;
   try {
     return await hedgedCatalogueRead(async (attempt,signal) => {
-      const result = await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attempt === 0 ? budget : Math.min(budget,6000),signal);
-      if ([502,503,504].includes(result.res.status)) {
+      const result = attempt===1 && directCatalogueRecoveryConfigured()
+        ? await readCatalogueDirect<T>(payload,AbortSignal.any([signal,AbortSignal.timeout(6000)]))
+        : await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attempt === 0 ? budget : Math.min(budget,6000),signal);
+      if ([500,502,503,504].includes(result.res.status)) {
         failedResponse=result;
         throw new TypeError(`Catalogue service HTTP ${result.res.status}`);
       }

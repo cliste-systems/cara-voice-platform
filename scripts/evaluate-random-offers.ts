@@ -1,7 +1,6 @@
 /** Production answer model + real lookup endpoint. This is NOT an audio/call test. */
 import 'dotenv/config';
-import {readFileSync} from 'node:fs';
-import {writeFile} from 'node:fs/promises';
+import {readFileSync,writeFileSync,existsSync} from 'node:fs';
 import OpenAI from 'openai';
 import {llm} from '@livekit/agents';
 import {CaraTools} from '../src/lib/cara_tools.js';
@@ -19,8 +18,9 @@ const client=new OpenAI({timeout:45000,maxRetries:1});
 const productionTool=new CaraTools().searchSuperValuProducts;
 const tools:OpenAI.Responses.Tool[]=[{type:'function',name:'searchSuperValuProducts',description:productionTool.description,strict:false,parameters:llm.toJsonSchema(productionTool.parameters) as Record<string,unknown>}];
 process.env.CLISTE_APP_URL=base;
-const results:any[]=[];
-for(const scenario of scenarios){
+const results:any[]=process.env.OFFER_TEST_RESUME==='1' && existsSync(output) ? JSON.parse(readFileSync(output,'utf8')).results : [];
+const completed=new Set(results.map(x=>x.name));
+async function evaluateScenario(scenario:any){
  const failures:string[]=[];const toolResults:any[]=[];let assistant='';
  const flags:Parameters<typeof trackCallerCatalogSearchIntent>[1]={};
  const conversation:any[]=[];let previousResponseId:string|undefined;
@@ -65,8 +65,12 @@ for(const scenario of scenarios){
  }
  }catch(e){failures.push(e instanceof Error?e.message:String(e));}
  results.push({...scenario,assistant,conversation,toolResults,failures,status:failures.length?'FAIL':'REVIEW'});
- await writeFile(output,JSON.stringify({model,endpoint:base,layer:'production-backend-and-live-lookup',not_a_spoken_call:true,results},null,2));
+ writeFileSync(output,JSON.stringify({model,endpoint:base,layer:'production-backend-and-live-lookup',not_a_spoken_call:true,results},null,2));
  console.log(JSON.stringify({name:scenario.name,status:failures.length?'FAIL':'REVIEW',failures}));
 }
+const pending=scenarios.filter((x:any)=>!completed.has(x.name));
+const concurrency=Math.min(6,Math.max(1,Number(process.env.OFFER_TEST_CONCURRENCY)||1));
+let next=0;
+await Promise.all(Array.from({length:concurrency},async()=>{for(;;){const scenario=pending[next++];if(!scenario)return;await evaluateScenario(scenario);}}));
 console.log(JSON.stringify({total:results.length,automatic_failures:results.filter(x=>x.failures.length).length,output,review_required:true}));
 if(results.some(x=>x.failures.length))process.exitCode=1;
