@@ -15,3 +15,8 @@ export function historicalOfferGuidance(query:string,reference=new Date()):strin
  if(!historicalYear||! /\b(?:Christmas|Easter|last year|last week|January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(query))return null;
  return 'Only current catalogue evidence is available. The historical promotion terms and expiry are not verified. Say you cannot confirm that those old offers can be used today; do not assert they expired, remain valid, or were checked in an archive. Do not substitute a current product offer for historical promotion evidence.';
 }
+
+export function ambiguousHistoricalOfferGuidance(query:string):string|null {
+ if (!/\blast\s+(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i.test(query) || /\b\d{4}-\d{2}-\d{2}\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}\b/i.test(query))return null;
+ return 'The caller gave an ambiguous historical weekday. Ask which exact calendar date they mean before searching. Do not calculate or choose the date for them, and do not answer from this week’s offers. The current catalogue does not establish historical promotion evidence.';
+}

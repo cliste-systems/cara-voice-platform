@@ -1,7 +1,7 @@
 import {requestedPackTotalQuote,requestedCounterWeightQuote,verifiedSavingsQuote} from './retail_quantity_quote.js';
 import {namedPackLookupQuery,counterWeightLookupQuery,mergeProductRefinement} from './retail_lookup_query.js';
 import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor} from './retail_offer_evidence.js';
-import {callerRequestsOfferDates,spokenVerifiedExpiry,historicalOfferGuidance} from './retail_offer_expiry.js';
+import {callerRequestsOfferDates,spokenVerifiedExpiry,historicalOfferGuidance,ambiguousHistoricalOfferGuidance} from './retail_offer_expiry.js';
 import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
 import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
 import { llm, voice } from '@livekit/agents';
@@ -1048,7 +1048,7 @@ export class CaraTools {
       if (resolvedIntent === 'offer') {
         ud.sessionFlags.callerAskedAboutOffers = true;
       }
-      const historicalGuidance=historicalOfferGuidance(`${originalCallerQuery} ${lookupQuery}`);
+      const historicalGuidance=ambiguousHistoricalOfferGuidance(originalCallerQuery)??historicalOfferGuidance(`${originalCallerQuery} ${lookupQuery}`);
       if(historicalGuidance)return finish({ok:true,message:historicalGuidance,matches:[]});
 
       const callerNappiesQuery = /\b(?:napp(?:y|ies)|diapers?)\b/i.test(originalCallerQuery)

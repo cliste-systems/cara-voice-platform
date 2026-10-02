@@ -3,6 +3,7 @@
 /** Keep exclusions out of positive matching, but enforce them on candidates. */
 export function positiveRetailQuery(query: string): string {
   return query
+    .replace(/\bcans\b/gi, "can")
     .replace(/\b(\d+(?:[.,]\d+)?)\s*(ml|cl|kg|g|l)\b/gi, "$1 $2")
     .replace(/\b(?:regular|normal|alcoholic)\b/gi, word => /\b(?:guinness|beer|lager|stout|cider)\b/i.test(query) ? " " : word)
     .replace(/\b(?:to|for)\s+(?:boil(?:ing)?|cook(?:ing)?)\s+(?:it\s+)?myself\b/gi, " ")
