@@ -980,7 +980,7 @@ export class CaraTools {
             ? mergeProductRefinement(pendingProductQuery,trimmed)
             : trimmed;
       if (callerProvidedRefinement && ud.sessionFlags.pendingAlcoholVariantQuestion &&
-          !/\b(?:regular|normal|alcoholic|zero|non[- ]?alcoholic|alcohol[- ]free|no alcohol)\b|0[.,]0/i.test(trimmed)) {
+          !/\b(?:regular|normal|alcoholic|zero|non[- ]?alcoholic|alcohol[- ]free|no alcohol)\b|0[.,]0/i.test(originalCallerQuery)) {
         ud.sessionFlags.pendingProductLookupQuery = baseLookupQuery;
         ud.sessionFlags.pendingProductSearchState = {...pendingState, query: baseLookupQuery};
         return finish({ok:true,clarification_required:true,message:`The pack size is now known, but the previously verified regular and alcohol-free versions are still unresolved. Ask: ${ud.sessionFlags.pendingAlcoholVariantQuestion} Do not report a missing offer or choose a version.`,matches:[]});
@@ -1002,6 +1002,12 @@ export class CaraTools {
         : cookingQuery;
       let lookupQuery = wantsLowestPrice && !callerRequestsLowestPrice(comparisonQuery)
         ? `cheapest ${comparisonQuery}`.slice(0, 120) : namedPackLookupQuery(comparisonQuery);
+      const callerAlcoholWords=(ud.sessionFlags.callerCatalogHistory??[originalCallerQuery]).join(' ');
+      if (/\b(?:guinness|beer|lager|stout|cider)\b/i.test(lookupQuery) &&
+          !/\b(?:regular|normal|alcoholic|zero|non[- ]?alcoholic|alcohol[- ]free|no alcohol)\b|0[.,]0/i.test(callerAlcoholWords)) {
+        // A model-generated regular modifier is not a caller preference.
+        lookupQuery=lookupQuery.replace(/\b(?:regular|normal|alcoholic)\b/gi,' ').replace(/\s+/g,' ').trim();
+      }
       const queryFulfilment = inferExplicitProductFulfilment(trimmed);
       const queryServiceArea = inferExplicitProductServiceArea(trimmed);
       const callerFulfilment = ud.sessionFlags.callerCatalogQuery

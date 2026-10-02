@@ -87,7 +87,7 @@ describe('CaraTools current-offer lookup', () => {
 
   it('retains a verified alcohol-version choice when the follow-up only supplies pack size', async () => {
     const matches=[{product_name:'Guinness Draught 0.0% Can 8 Pack (500 ml)',department:'Beer',quote_text:'Listed nationally.',score:1,is_alcohol:false},{product_name:'Guinness Draught Stout Can 8 Pack (500 ml)',department:'Beer',quote_text:'Listed nationally.',score:1,is_alcohol:true}];
-    const {requests,result}=await lookup('Guinness Draught',{ok:true,matches},[],'Guinness Draught 8 pack 500ml cans not Nitrosurge');
+    const {requests,result}=await lookup('Guinness Draught',{ok:true,matches},[],'regular Guinness Draught 8 pack 500ml cans not Nitrosurge',{followUpCallerQuery:'The eight pack of 500 ml cans, not Nitrosurge'});
     assert.equal(requests.length,1);
     assert.match(result.message,/regular and alcohol-free versions are still unresolved/);
     assert.match(result.message,/Do not report a missing offer/);
