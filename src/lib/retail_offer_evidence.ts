@@ -3,7 +3,7 @@ import {formatSpokenEurAmount} from './catalogue-runtime/lib/spoken-eur-price.js
 
 // Only reject explicitly contradictory variant families. Generic range names
 // and omitted flavours do not establish a contradiction or eligibility.
-const families=[['thin','deep pan'],['raspberry','strawberry','rhubarb','vanilla'],['full fat','skimmed','semi skimmed']];
+const families=[['thin','deep pan'],['raspberry','strawberry','rhubarb','vanilla','mango','peach','blueberry','cherry','blackberry'],['full fat','skimmed','semi skimmed']];
 export function matchesRequestedWineColor(query:string,match:SearchSupervaluProductsMatch):boolean {
  const white=/\bwhite wine\b/i.test(query)&&! /\b(?:no|not|without)\s+white wine\b/i.test(query);
  const red=/\bred wine\b/i.test(query)&&! /\b(?:no|not|without)\s+red wine\b/i.test(query);

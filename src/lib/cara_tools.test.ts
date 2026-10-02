@@ -85,6 +85,12 @@ describe('CaraTools current-offer lookup', () => {
     }
   }
 
+  it('does not infer card eligibility when the caller asks what qualifies', async () => {
+    const {result}=await lookup('Tampax Compak Regular Applicator Tampons 18 Piece offer', {ok:true,matches:[{product_name:'Tampax Compak Regular Applicator Tampons (18 Piece)',department:'Beauty & Personal Care',sku:'tampons',score:1,current_price_eur:4.99,discount_label:'2 for €8 Always/Tampax 14pce-68pce',quote_text:'Two for eight euro.'}]},[],undefined,{callerQuery:'If I get two Tampax Compak Regular Applicator Tampons 18 Piece, anything I need to qualify?'});
+    assert.match(result.message,/Card eligibility is unknown/);
+    assert.match(result.message,/Do not say cash is fine, no card is needed/);
+  });
+
   it('retains a verified alcohol-version choice when the follow-up only supplies pack size', async () => {
     const matches=[{product_name:'Guinness Draught 0.0% Can 8 Pack (500 ml)',department:'Beer',quote_text:'Listed nationally.',score:1,is_alcohol:false},{product_name:'Guinness Draught Stout Can 8 Pack (500 ml)',department:'Beer',quote_text:'Listed nationally.',score:1,is_alcohol:true}];
     const {requests,result}=await lookup('Guinness Draught',{ok:true,matches},[],'regular Guinness Draught 8 pack 500ml cans not Nitrosurge',{followUpCallerQuery:'The eight pack of 500 ml cans, not Nitrosurge'});

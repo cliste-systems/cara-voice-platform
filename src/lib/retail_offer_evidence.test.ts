@@ -38,3 +38,10 @@ test('retailer codes are removed from both model-visible promotion fields',()=>{
  assert.equal(result.discount_label,'2 for €28 SuperValu Pampers Jumbo');
  assert.doesNotMatch(result.quote_text,/SV.*CT/);
 });
+
+
+test('Mango yogurt does not inherit an explicitly enumerated different-flavour promotion',()=>{
+ const m={product_name:'Activia Mango Gut Health Yogurt 4 Pack (115 g)',department:'Yogurt',sku:'mango',score:1,current_price_eur:3.49,quote_text:'Three for five euro.',discount_label:'3 for €5 Danone Activia Strawberry/Rhubarb/0%Vanilla',is_on_offer:true};
+ const result=guardOfferEvidence(m);assert.equal(result.is_on_offer,false);assert.equal(result.discount_label,null);assert.match(result.quote_text,/Eligibility for this exact product is not verified/);
+ assert.equal(conflictingOfferVariant('Activia Mango','3 for €5 Activia Selected Range'),false);
+});

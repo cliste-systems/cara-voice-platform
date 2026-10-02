@@ -945,6 +945,12 @@ export function formatWeeklyOfferQuote(input: {
   const mass=(value:string)=>[...value.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)\b/gi)].map(m=>({dimension:/^(?:kg|g)$/i.test(m[2]!)?'mass':'volume',n:Number(m[1]!.replace(',','.'))*({kg:1000,g:1,ml:1,cl:10,l:1000}[m[2]!.toLowerCase()]??1)}));
   const pack=mass(input.productName).at(-1);
   const advertised=mass(input.discountLabel??'');
+  // A shared unit applies to both ends of an advertised range, e.g. 150-180g.
+  for(const range of (input.discountLabel??'').matchAll(/\b(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)?\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l)\b/gi)){
+    for(const [number,unit] of [[range[1],range[2]??range[4]],[range[3],range[4]]]){
+      advertised.push({dimension:/^(?:kg|g)$/i.test(unit!)?'mass':'volume',n:Number(number!.replace(',','.'))*({kg:1000,g:1,ml:1,cl:10,l:1000}[unit!.toLowerCase()]??1)});
+    }
+  }
   const packCount=Number(input.productName.match(/\b(\d+)\s*pack\b/i)?.[1]??1);
   const comparable=advertised.filter(a=>a.dimension===pack?.dimension).map(a=>a.n);
   const candidates=pack?[pack.n,pack.n*packCount]:[];
@@ -969,7 +975,7 @@ export function formatWeeklyOfferQuote(input: {
       sentences.push(/[.!?]$/.test(terms) ? terms : `${terms}.`);
       if (!/mix\s*(?:and|&)\s*match/i.test(input.discountLabel ?? "")) sentences.push("Eligibility to mix different products is not verified by this listing.");
       if (price != null) {
-        sentences.push(perKilo ? `Single price ${price} per kilo.` : `Single price ${price} each.`);
+        sentences.push(perKilo ? `Current listed single price ${price} per kilo.` : `Current listed single price ${price} each.`);
       }
 
       if (
@@ -992,7 +998,7 @@ export function formatWeeklyOfferQuote(input: {
   if (genericBundle && spokenLabel) {
     if (/bundle\s+offer/i.test(input.discountLabel ?? "")) sentences.push("This is a cross-product bundle requiring the named items, not multiple packs of this product alone.");
     sentences.push(`${spokenLabel}.`);
-    if (price != null) sentences.push(perKilo ? `Single price ${price} per kilo.` : `Single price ${price} each.`);
+    if (price != null) sentences.push(perKilo ? `Current listed single price ${price} per kilo.` : `Current listed single price ${price} each.`);
     return sentences.join(" ");
   }
 
@@ -1127,7 +1133,7 @@ async function fetchRetailWeeklyOffersForBanner(
   const readPage = async (from: number) => {
     let query = supabase
       .from("retail_weekly_offers")
-      .select("*")
+      .select("id,sku,product_name,department,offer_channel,service_area,fulfilment,current_price_eur,was_price_eur,discount_label,price_per_unit,category_breadcrumb,campaign_names,sell_by,price_unit_type,is_alcohol,offer_week_start,offer_week_end,search_text,synced_at")
       .eq("retail_banner", retailBanner)
       .eq("is_national", true)
       .lte("offer_week_start", retailCalendarDay(reference))

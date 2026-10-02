@@ -1307,7 +1307,7 @@ export class CaraTools {
               : 'No verified public expiry date is supplied. Do not quote an open-ended placeholder as a real offer expiry.') : '',
           /\brewards\b|\bloyalty\b|\bmembers?\b/i.test(match.discount_label ?? '')
             ? 'Membership condition: this offer requires the stated Rewards membership. Never say the offer applies without it. A usual/was price is a reference price, not a verified current non-member shelf price.'
-            : /\b(?:no|without)\b.*\b(?:rewards|card)\b/i.test(originalCallerQuery)
+            : /\b(?:no|without)\b.*\b(?:rewards|card)\b|\b(?:qualify|eligib|conditions?|rewards|card)\b/i.test(originalCallerQuery)
               ? 'Card eligibility is unknown. Say that no Rewards condition is stated. Do not say cash is fine, no card is needed, or that this price applies without a card.' : '',
         ].filter(Boolean).join(' '))
         .join('\n\n');

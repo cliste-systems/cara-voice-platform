@@ -291,7 +291,7 @@ export function parseRetailPromotionQuery(
     );
   const halfPrice = /\bhalf[ -]+price\b|\b50\s*%\s*off\b/i.test(normalized);
   const savePercent = normalized.match(
-    /(?:\bsave\s+)?(\d+(?:[.,]\d+)?)\s*%\s*(?:off)?/i,
+    /\bsave\s+(\d+(?:[.,]\d+)?)\s*%|(\d+(?:[.,]\d+)?)\s*%\s*(?:off|discount)\b/i,
   );
   const saveAmount = normalized.match(
     /\bsave\s+((?:€\s*)?\d+(?:[.,]\d{1,2})?|\d{1,2}\s*c)\b/i,
@@ -333,7 +333,7 @@ export function parseRetailPromotionQuery(
     mechanic,
     quantity: multibuy ? Number(multibuy[1]) : null,
     totalEur: multibuy ? parseMoney(multibuy[2]) : null,
-    percent: savePercent ? parseMoney(savePercent[1]) : halfPrice ? 50 : null,
+    percent: savePercent ? parseMoney(savePercent[1] ?? savePercent[2]) : halfPrice ? 50 : null,
     amountEur: saveAmount
       ? parseMoneyExpression(saveAmount[1])
       : fixedPrice
