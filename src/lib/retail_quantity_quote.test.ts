@@ -31,3 +31,10 @@ test('complete bundles are calculable without inventing a missing standalone pri
  assert.equal(requestedPackTotalQuote('buy three packs',m),'');
  assert.equal(requestedPackTotalQuote('buy one pack',m),'');
 });
+
+
+test('calculates exact regular totals when the product price is verified but its promotion conflicts',()=>{
+ const match={current_price_eur:2.35,fulfilment:'prepack',price_conflict:false,quote_text:'Verified current listed single price two euro thirty five. Eligibility for this exact product is not verified.'} as Parameters<typeof requestedPackTotalQuote>[1];
+ assert.match(requestedPackTotalQuote('If I pick up 3 packs what will that cost on the deal?',match),/seven euro five.*not a verified offer or deal total/);
+ assert.equal(requestedPackTotalQuote('pick up 3 packs',{...match,price_conflict:true}), '');
+});

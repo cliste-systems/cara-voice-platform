@@ -27,8 +27,12 @@ export function requestedPackTotalQuote(query:string,match:SearchSupervaluProduc
  const n=count?(words[count]??Number(count)):0;
  const price=match.current_price_eur;
  const packEvidence=match.quote_text.replace(/Eligibility to mix different products is not verified[^.]*\.?/gi,'');
- const packConflict=/(?:pack|exact product).*?(?:eligib|qualif|appl).*?(?:unverified|not (?:confirmed|verified))|eligib.*?exact pack.*?(?:unverified|not (?:confirmed|verified))|can(?:not|[’']t) confirm.*(?:appl|qualif)/i.test(packEvidence);
- if(!n||n>100||match.fulfilment==='counter'||packConflict)return '';
+ const packConflict=/(?:pack|exact product).*?(?:eligib|qualif|appl).*?(?:unverified|not (?:confirmed|verified))|eligib.*?exact (?:pack|product).*?(?:unverified|not (?:confirmed|verified))|can(?:not|[’']t) confirm.*(?:appl|qualif)/i.test(packEvidence);
+ if(!n||n>100||match.fulfilment==='counter')return '';
+ if(packConflict){
+  if(!price||match.price_conflict||!/Verified current listed single price/i.test(match.quote_text))return '';
+  return `Verified listed-price calculation for ${n} packs of this exact item: ${formatSpokenEurAmount(Math.round(price*100)*n/100)} at the supplied single price. This is not a verified offer or deal total; eligibility for the conflicting promotion is unverified. Do not recalculate or round this amount.`;
+ }
  const bundle=parseRetailMultibuyLabel(match.discount_label);
  if(bundle?.quantity&&bundle.totalEur&&n%bundle.quantity===0)return `Verified calculation for ${n} packs of this exact item: ${formatSpokenEurAmount(Math.round(bundle.totalEur*100)*(n/bundle.quantity)/100)} altogether. This uses complete advertised bundles and does not infer a single-item price. Preserve any Rewards condition; local stock remains unverified.`;
  if(!price)return '';

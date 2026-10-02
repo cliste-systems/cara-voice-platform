@@ -11,3 +11,5 @@ After changing the app catalogue logic, run `python3 scripts/sync-catalogue-runt
 If both the app and database are unavailable, the lookup must fail explicitly. It must never turn a service failure into “no offers” or quote expired data. No distributed service can guarantee permanent availability.
 
 Production answer tests use `scripts/evaluate-random-offers.ts`. `OFFER_TEST_RESUME=1` resumes saved results; `OFFER_TEST_CONCURRENCY` allows up to six independent conversations. Keep results in ignored `call-transcripts/`. These are backend/model tests, not evidence of audio delivered to a caller.
+
+Cold national-offer loads retrieve the first page and then up to three subsequent pages together, keeping deterministic order and refusing partial results if any page fails. Missing multiword national products similarly check candidates in waves of at most three; all candidates must finish before claiming no verified match. These bounded overlaps reduce serial cold-read delays without removing departments or typo recovery.

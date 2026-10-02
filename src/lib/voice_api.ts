@@ -415,6 +415,7 @@ export type SearchSupervaluProductsMatch = {
   score: number;
   quote_text: string;
   price_basis?: string;
+  price_conflict?: boolean;
   mix_match_verified?: boolean | null;
   offer_week_start?: string | null;
   offer_week_end?: string | null;
