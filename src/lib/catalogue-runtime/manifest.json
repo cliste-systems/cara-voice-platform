@@ -1,5 +1,5 @@
 {
-  "app_commit": "2fecb5eafc571c450a0c5f32fce9413825bd3597",
+  "app_commit": "7e380f4d8fb0b451cadf5efcc4d7789cc320b9a3",
   "files": {
     "app/api/voice/search-supervalu-products/route": "8541c65feb30614c147f8819d09ae3e01e0a2cc9773f0655c9ec7499b3a06767",
     "lib/booking-reference": "087be8411c7113dbd2636bcd20ef86344a59456c458c53e0c3d6d1a3dfe32bd3",
@@ -14,7 +14,7 @@
     "lib/retail-price-presentation": "a72050efefe2d5fef73270f01c771703784d2e7262ae7d4239cbb725fb912ff2",
     "lib/retail-promotion-search": "06ffe6cfb7aae3a47852a3bbdc7ff2c7d5cbe24ddebbeafe19c50b9cf9167217",
     "lib/spoken-eur-price": "8de2ad93399c63d4b8770d562a9f8c53a15197f285698cd4a585b5b718546f91",
-    "lib/supervalu-catalog-search": "455a893513c1f30c8d0b1f2f74a8ab3aaccce8a040012d6c5b139f619dac439a",
+    "lib/supervalu-catalog-search": "2b5f13f3be620a782ce1bd6f53284c4559834849f39962eccccb96748dc83fcf",
     "lib/supervalu-gateway": "73e3ab6b38d3880969a0ba5379a46b39c2a150cda1cd37654248e9899f521f43",
     "lib/retail-catalog-search": "7dc3a79245dd9b872ba890aee77e4cabd7daddbd2b93b3f2a47a1be2ee2bb071",
     "lib/retail-product-clarification": "4e3b8bd4d6ba10ac6d7500adcd26dc4befae62a3f24b7dd4cc7dc31e9d5eaed9",
@@ -35,7 +35,7 @@
     "lib/spoken-eur-price": "ce34f587db85567bb96655e64ec7d249ce46a37f01ca0b8964831ad2ad6aea25",
     "lib/supervalu-gateway": "00809fbf53cf76eea351b7b00c744964cef3470d73bd19b43fefa0877b0eaced",
     "lib/retail-catalog-search": "fdc10a8fd972ff4cb30743c1f4db1c8c4fbef1aece4208903256cd0cccedf6b3",
-    "lib/supervalu-catalog-search": "c70577aa2ea3755faf683fa749676c50565ef4f513696289a8cbf8db833f8da7",
+    "lib/supervalu-catalog-search": "57de09376f0a6fe946e2aa6c3e81d7ffc086b3eb3337ac839b703aa8c213722f",
     "lib/retail-promotion-search": "f07e3fbff1fa117fc57f703de41f79ef93d727ea2921747ec986e88f760fabce",
     "lib/retail-weekly-offers-search": "23da30add8be2a4f620f6dcb8a1c813cfc00fc54b7fa6ab3982673ffc3ad85aa",
     "lib/retail-product-clarification": "cf0f8b09f6f6224ea44dd0bab5e28920ac1defe2d8ae71707de11bade335a051",

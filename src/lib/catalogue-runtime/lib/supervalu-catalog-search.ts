@@ -535,7 +535,7 @@ function normalizeProductKey(value: string): string {
   return normalizeSearchText(value);
 }
 
-function mergeGatewayWithSyncedOffers(
+export function mergeGatewayWithSyncedOffers(
   gatewayMatches: SupervaluCatalogMatch[],
   syncedMatches: WeeklyOfferMatch[],
   intent: CatalogQuoteIntent,
@@ -565,6 +565,9 @@ function mergeGatewayWithSyncedOffers(
   const merged = gatewayMatches.map((match) => {
     const synced = syncedByName.get(normalizeProductKey(match.productName));
     if (!synced) return match;
+    // A bundle without a standalone price must not erase a verified regular
+    // price for the same product when the caller asks for its price.
+    if (intent === "price" && synced.currentPriceEur == null && match.currentPriceEur != null && !match.priceConflict && match.sku != null && match.sku === synced.sku) return match;
     return syncedOfferToCatalogMatch(synced);
   });
 

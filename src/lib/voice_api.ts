@@ -360,6 +360,7 @@ export type SearchWeeklyOffersMatch = {
   price_per_unit: string | null;
   score: number;
   quote_text: string;
+  price_basis?: string;
 
 };
 
@@ -411,6 +412,7 @@ export type SearchSupervaluProductsMatch = {
   sku: string | null;
   score: number;
   quote_text: string;
+  price_basis?: string;
   offer_week_start?: string | null;
   offer_week_end?: string | null;
   discount_label?: string | null;

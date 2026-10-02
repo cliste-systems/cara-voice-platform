@@ -1,5 +1,5 @@
-import {requestedPackTotalQuote} from './retail_quantity_quote.js';
-import {namedPackLookupQuery} from './retail_lookup_query.js';
+import {requestedPackTotalQuote,requestedCounterWeightQuote} from './retail_quantity_quote.js';
+import {namedPackLookupQuery,counterWeightLookupQuery} from './retail_lookup_query.js';
 import {guardOfferEvidence,spokenOfferMatches} from './retail_offer_evidence.js';
 import {callerRequestsOfferDates,spokenVerifiedExpiry} from './retail_offer_expiry.js';
 import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
@@ -991,7 +991,7 @@ export class CaraTools {
       const comparisonQuery = wantsLowestPrice && !lowestPriceOffersOnly
         ? cookingQuery.replace(/\b(?:offers?|deals?|specials?|this week)\b/gi, ' ').replace(/\s+/g, ' ').trim()
         : cookingQuery;
-      const lookupQuery = wantsLowestPrice && !callerRequestsLowestPrice(comparisonQuery)
+      let lookupQuery = wantsLowestPrice && !callerRequestsLowestPrice(comparisonQuery)
         ? `cheapest ${comparisonQuery}`.slice(0, 120) : namedPackLookupQuery(comparisonQuery);
       const queryFulfilment = inferExplicitProductFulfilment(trimmed);
       const queryServiceArea = inferExplicitProductServiceArea(trimmed);
@@ -1024,6 +1024,7 @@ export class CaraTools {
           ? wantsLowestPrice ? inferExplicitProductServiceArea(pendingProductQuery ?? '') : pendingState?.serviceArea
           : undefined);
 
+      if(effectiveFulfilment==='counter')lookupQuery=counterWeightLookupQuery(lookupQuery);
       const resolvedIntent: CatalogSearchIntent | undefined =
         rewardsPricePoint != null
           ? 'offer'
@@ -1174,7 +1175,7 @@ export class CaraTools {
             recoveredProduct: confident.product_name,
             recoveredSku: confident.sku,
           });
-        } else if (firstUsefulRetry) {
+        } else if (firstUsefulRetry && productQueryTokens(lookupQuery).length<=1) {
           result = firstUsefulRetry;
           console.info('[cara_tools] product lookup broad recovery', {
             query: lookupQuery,
@@ -1259,6 +1260,7 @@ export class CaraTools {
       const formatted = result.matches
         .map((match) => [match.quote_text.trim(),
           requestedPackTotalQuote(originalCallerQuery,match),
+          requestedCounterWeightQuote(originalCallerQuery,match),
           match.current_price_eur === null ? 'The requested quantity has no verified standalone total. Answer that you cannot confirm its total. Never prorate a bundle, even conditionally, or propose an illustrative total below the bundle minimum.' : '',
           match.is_on_offer === true && match.was_price_eur === null
             ? 'No usual/was price is supplied for this item. The single price is a current listed price, not a historical usual price. A bundle saving may only be compared with buying the same quantity at that listed single price.' : '',

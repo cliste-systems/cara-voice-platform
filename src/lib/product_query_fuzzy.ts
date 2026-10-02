@@ -68,7 +68,7 @@ export function inferExplicitProductFulfilment(
   query: string,
 ): RetailProductFulfilment | undefined {
   const q = query.toLowerCase();
-  if (/sealed (?:packets|packs)|\b(?:not|rather than|without)\b.*\bcounter\b/i.test(query)) return 'prepack';
+  if (/\bsealed\b.*\b(?:packets|packs)\b|\b(?:not|rather than|without)\b.*\bcounter\b/i.test(query)) return 'prepack';
   if (
     /pre\s*-?\s*pack|packaged|meat aisle|fish aisle|chilled aisle|chilled pack|in the aisle|on the shelf|shelf pack/.test(q)
   ) {
