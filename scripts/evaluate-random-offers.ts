@@ -39,11 +39,19 @@ for(const scenario of scenarios){
    if(!toolResults.length)failures.push('product answer without lookup');
    const matches=toolResults.flatMap(x=>x.body.matches||[]);
    const expected=scenario.expected_offer;
-   if(!matches.some(m=>String(m.sku)===String(expected.sku)||String(m.product_name||m.productName||'').toLowerCase()===expected.product_name.toLowerCase()))failures.push('sampled current offer not returned');
+   const identity=(name:string)=>name.toLowerCase().replace(/^supervalu\s+/,'');
+   if(!matches.some(m=>String(m.sku)===String(expected.sku)||String(m.product_name||m.productName||'').toLowerCase()===expected.product_name.toLowerCase()||(
+    // The live source may replace an own-brand alias during a sync. Accept
+    // only the identical named product/pack with identical price and terms.
+    identity(String(m.product_name||m.productName||''))===identity(expected.product_name)&&
+    Number(m.current_price_eur)===Number(expected.current_price_eur)&&
+    m.discount_label===expected.discount_label&&m.fulfilment===expected.fulfilment
+   )))failures.push('sampled current offer not returned');
    if(toolResults.some(x=>x.body.clarification_required)) { /* Honest disambiguation assessed in review. */ }
   }
   if(/\brewards\b|\bloyalty\b|\bmembers?[- ]only\b/i.test(assistant) && toolResults.length && !toolResults.some(x=>(x.body.matches||[]).some((m:any)=>/\brewards\b|\bloyalty\b|\bmembers?\b/i.test(`${m.discount_label||''} ${m.quote_text||''}`))))failures.push('invented membership condition');
   if(/\*\*|^#+\s/m.test(assistant))failures.push('Markdown in spoken reply');
+  if(/\bSV\s*(?:&|and)\s*CT\b/i.test(assistant))failures.push('internal retailer codes read aloud');
   if(/that (?:does not|doesn.t) mean there (?:are|aren.t|aren’t)/i.test(assistant))failures.push('repetitive uncertainty disclaimer');
  }catch(e){failures.push(e instanceof Error?e.message:String(e));}
  results.push({...scenario,assistant,toolResults,failures,status:failures.length?'FAIL':'REVIEW'});
@@ -51,3 +59,4 @@ for(const scenario of scenarios){
  console.log(JSON.stringify({name:scenario.name,status:failures.length?'FAIL':'REVIEW',failures}));
 }
 console.log(JSON.stringify({total:results.length,automatic_failures:results.filter(x=>x.failures.length).length,output,review_required:true}));
+if(results.some(x=>x.failures.length))process.exitCode=1;

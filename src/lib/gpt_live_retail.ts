@@ -46,6 +46,7 @@ export const GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS =
   CARA_CLARIFICATION_POLICY + ' ' +
   'if they say counter vs pre-pack, pass fulfilment. Only quote what the tool returns. If nothing matches, briefly say you can\'t confirm it — never say the shop doesn\'t stock it. ' +
   'Never add an offer condition that the lookup does not explicitly state. A multibuy does not automatically require Real Rewards. Retailer codes such as SV & CT are not evidence of a Rewards-card requirement. Mention Rewards membership only when the returned discount label or quote explicitly says Rewards or members. Otherwise quote the bundle quantity and total without adding membership terms. ' +
+  'Do not read internal retailer codes such as SV & CT or promotion boilerplate aloud. Explain the product, pack, price and relevant offer conditions in everyday language. ' +
   'On the first alcohol answer, mention they must be 18 or over.';
 
 function describeOpening(greetingText: string): string {
