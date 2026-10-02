@@ -959,8 +959,15 @@ export class CaraTools {
         (!pendingState?.serviceArea || !(inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) || (inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) === pendingState.serviceArea) &&
         productQueryTokens(trimmed).length > 0 &&
         productQueryTokens(trimmed).length <= 3;
-      const baseLookupQuery =
-        callerOnlyChoseFulfilment && pendingProductQuery
+      const originalCallerQuery = ud.sessionFlags.callerCatalogQuery ?? trimmed;
+      const callerNappySizeRefinement = pendingRefinementClarification && pendingProductQuery &&
+        /\b(?:napp(?:y|ies)|diapers?)\b/i.test(pendingProductQuery) &&
+        /^(?:size\s+(?:[0-9]+\+?|one|two|three|four|five|six|seven|eight)(?:\s+plus)?|newborn|premature)[.!]?$/i.test(originalCallerQuery.trim());
+      const sizeWords: Record<string, string> = {one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8'};
+      const nappySizeQuery = originalCallerQuery.replace(/\b(one|two|three|four|five|six|seven|eight)\b/gi, word => sizeWords[word.toLowerCase()] ?? word).replace(/\s+plus\b/gi,"+");
+      const baseLookupQuery = callerNappySizeRefinement
+        ? `${pendingProductQuery} ${nappySizeQuery}`
+        : callerOnlyChoseFulfilment && pendingProductQuery
           ? pendingProductQuery
           : callerProvidedRefinement
             ? `${pendingProductQuery} ${trimmed}`
@@ -1022,13 +1029,19 @@ export class CaraTools {
         ud.sessionFlags.callerAskedAboutOffers = true;
       }
 
-      const broadQuestion = departmentClarification(lookupQuery);
+      const callerNappiesQuery = /\b(?:napp(?:y|ies)|diapers?)\b/i.test(originalCallerQuery)
+        ? originalCallerQuery : lookupQuery;
+      const missingNappySize = /\b(?:napp(?:y|ies)|diapers?)\b/i.test(callerNappiesQuery) &&
+        !/\b(?:rash|cream|bags?|sacks?|bins?|disposal)\b/i.test(callerNappiesQuery) &&
+        !/\b(?:size\s*(?:[0-9]+|one|two|three|four|five|six|seven|eight)|newborn|premature)\b/i.test(callerNappiesQuery) &&
+        !/\b(?:examples?|any size|all sizes|rundown)\b/i.test(originalCallerQuery);
+      const broadQuestion = missingNappySize ? 'What size nappies do you need?' : departmentClarification(lookupQuery);
       if (broadQuestion && rewardsPricePoint == null) {
         ud.sessionFlags.pendingProductRefinementClarification = true;
         ud.sessionFlags.pendingProductFulfilmentClarification = false;
-        ud.sessionFlags.pendingProductLookupQuery = lookupQuery;
+        ud.sessionFlags.pendingProductLookupQuery = missingNappySize ? callerNappiesQuery : lookupQuery;
         ud.sessionFlags.pendingProductSearchState = {
-          query: lookupQuery, ...(resolvedIntent ? {intent:resolvedIntent} : {}), ...(effectiveServiceArea ? {serviceArea:effectiveServiceArea} : {}), ...(effectiveFulfilment ? {fulfilment:effectiveFulfilment} : {}),
+          query: missingNappySize ? callerNappiesQuery : lookupQuery, ...(resolvedIntent ? {intent:resolvedIntent} : {}), ...(effectiveServiceArea ? {serviceArea:effectiveServiceArea} : {}), ...(effectiveFulfilment ? {fulfilment:effectiveFulfilment} : {}),
         };
         return finish({ok:true, clarification_required:true, message:`${CARA_CLARIFICATION_POLICY} Ask one short question about what kind of product the caller wants in the department they named. ${broadQuestion} Do not search, list products or prices, or say you are checking yet. Wait for their answer.`, matches:[]});
       }

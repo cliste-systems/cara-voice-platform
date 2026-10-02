@@ -38,7 +38,7 @@ describe('CaraTools current-offer lookup', () => {
     response: Record<string, unknown>,
     replies: Record<string, unknown>[] = [],
     followUp?: string,
-    scope: {service_area?: "grocery"; fulfilment?: "prepack"; callerQuery?: string} = {},
+    scope: {service_area?: "grocery"; fulfilment?: "prepack"; callerQuery?: string; followUpCallerQuery?: string} = {},
   ) {
     const requests: Array<Record<string, unknown>> = [];
     const previousFetch = globalThis.fetch;
@@ -70,7 +70,11 @@ describe('CaraTools current-offer lookup', () => {
         message: string;
         matches?: Array<{ product_name: string }>;
       };
-      if (followUp) result = await tool.execute({query:followUp}, context) as typeof result;
+      if (followUp) {
+        const ud=context.ctx.userData as CaraAgentUserData;
+        trackCallerCatalogSearchIntent(scope.followUpCallerQuery ?? followUp,ud.sessionFlags);
+        result = await tool.execute({query:followUp}, context) as typeof result;
+      }
       return { requests, result };
     } finally {
       globalThis.fetch = previousFetch;
@@ -80,6 +84,21 @@ describe('CaraTools current-offer lookup', () => {
       else process.env.CLISTE_VOICE_WEBHOOK_SECRET = previousSecret;
     }
   }
+
+  it('asks for nappy size before listing and does not inherit an assistant-suggested brand', async () => {
+    const {requests,result}=await lookup('Pampers nappies',{ok:true,matches:[{product_name:'Huggies Size 2',quote_text:'Eight euro.',score:1}]},[],'Pampers Baby Dry nappies Size 2',{callerQuery:'Nappies please',followUpCallerQuery:'Size two'});
+    assert.equal(requests.length,1);
+    assert.match(String(requests[0]?.query),/nappies.*size 2/i);
+    assert.doesNotMatch(String(requests[0]?.query),/Pampers|Baby Dry/i);
+    assert.equal(result.ok,true);
+  });
+
+  it('does not ask for a nappy size for nappy rash cream or a supplied size', async () => {
+    for(const query of ['nappy rash cream','Pampers nappies size 2']) {
+      const {requests}=await lookup(query,{ok:true,matches:[{product_name:query,quote_text:'Eight euro.',score:1}]});
+      assert.equal(requests.length,1,query);
+    }
+  });
 
   it('does not hide named meat, dairy or bakery offers behind a guessed grocery filter', async () => {
     for (const query of ['SuperValu Fresh Irish Chicken Fillets Large Pack (1 kg)', 'Galtee Cheese (200 g)', 'SuperValu Chocolate Muffins']) {

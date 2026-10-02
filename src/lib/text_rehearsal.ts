@@ -244,7 +244,7 @@ export function assistantReplyLooksLikeRetailFulfilmentClarification(text: strin
   if (!t) return false;
   if (assistantReplyLooksLikeClarificationRequest(t)) return true;
   if (!/\?/.test(t)) return false;
-  if (/\b(?:which (?:department|type|kind|brand|size|one)|which (?:were|are) you (?:after|looking for)|what (?:sort|type|kind)|what (?:did|do|would) you (?:fancy|want|have in mind)|what (?:were|are) you (?:after|looking for)|did you have .* in mind)\b/i.test(t)) return true;
+  if (/\b(?:which (?:department|type|kind|brand|size|one)|which (?:were|are) you (?:after|looking for)|would you like|what (?:sort|type|kind|size)|what (?:did|do|would) you (?:fancy|want|have in mind)|what (?:were|are) you (?:after|looking for)|did you have .* in mind)\b/i.test(t)) return true;
   return /\b(counter|pre-?pack|aisle|butcher|fresh|per kilo|kilo)\b/i.test(t);
 }
 
