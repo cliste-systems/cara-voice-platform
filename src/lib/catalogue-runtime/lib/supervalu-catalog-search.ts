@@ -437,11 +437,11 @@ export function formatCatalogStockQuote(input: {
       }
     } else if (intent === "price") {
       parts.push(
-        `${input.productName}${dept} is ${price} — that's the regular price; it's not on offer this week on the range I checked.`,
+        `${input.productName}${dept} is ${price} — that's the regular price. I couldn't verify a current offer for this item from the range I checked.`,
       );
     } else {
       parts.push(
-        `${input.productName}${dept} is listed at ${price} on the SuperValu national range — not on offer this week.`,
+        `${input.productName}${dept} is listed at ${price} on the SuperValu national range. I couldn't verify a current offer for this item from the range I checked.`,
       );
     }
     if (input.pricePerUnit) {
