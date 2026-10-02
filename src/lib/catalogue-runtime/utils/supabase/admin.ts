@@ -18,6 +18,11 @@ export function createAdminClient() {
     const publicRefresh=(requestUrl.pathname.endsWith('/retail_weekly_offers')&&(requestUrl.searchParams.get('organization_id')==='is.null'||requestUrl.searchParams.get('is_national')==='eq.true')) ||
       (requestUrl.pathname.endsWith('/retail_catalog_products')&&requestUrl.searchParams.get('is_national')==='eq.true');
     const deadline=AbortSignal.timeout(8000);
-    return fetch(input,{...init,headers,signal:signal&&!publicRefresh?AbortSignal.any([signal,deadline]):deadline});
+    // Honour the handler's shorter query deadline (notably optional assortment
+    // enrichment). Replacing it with the adapter deadline could make a
+    // one-second best-effort read hold the entire offer reply for eight seconds.
+    const querySignal=init?.signal??(input instanceof Request?input.signal:undefined);
+    const signals=[deadline,...(querySignal?[querySignal]:[]),...(signal&&!publicRefresh?[signal]:[])];
+    return fetch(input,{...init,headers,signal:AbortSignal.any(signals)});
   }}});
 }

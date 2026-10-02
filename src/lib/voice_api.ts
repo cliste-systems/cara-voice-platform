@@ -430,7 +430,7 @@ async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPaylo
   try {
     return await hedgedCatalogueRead(async (attempt,signal) => {
       const result = attempt===1 && directCatalogueRecoveryConfigured()
-        ? await readCatalogueDirect<T>(payload,AbortSignal.any([signal,AbortSignal.timeout(8000)]))
+        ? await readCatalogueDirect<T>(payload,AbortSignal.any([signal,AbortSignal.timeout(12000)]))
         : await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attempt === 0 ? budget : Math.min(budget,6000),signal);
       if ([500,502,503,504].includes(result.res.status)) {
         failedResponse=result;
@@ -441,7 +441,7 @@ async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPaylo
         if (body.ok !== true || !Array.isArray(body.matches)) throw new TypeError('Invalid catalogue response');
       }
       return {...result,recoveryUsed:attempt===1};
-    }, error => error instanceof TypeError || (error instanceof Error && ['AbortError','TimeoutError','SyntaxError'].includes(error.name)));
+    }, error => error instanceof TypeError || isFetchTimeoutError(error) || (error instanceof Error && error.name==='SyntaxError'),directCatalogueRecoveryConfigured()?500:2000);
   } catch(error) {
     if (failedResponse) return failedResponse;
     throw error;

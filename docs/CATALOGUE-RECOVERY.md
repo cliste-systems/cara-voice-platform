@@ -1,6 +1,6 @@
 # Catalogue recovery
 
-Cara normally reads the catalogue through the production app. After a two-second stall, or a transient failure, it starts one independent read through its existing server-side Supabase connection. The first successful read wins and the other is cancelled. Reads have bounded deadlines; actions, orders and messages are never retried this way.
+Cara normally reads the catalogue through the production app. After a half-second stall, or a transient failure, it starts one independent read through its existing server-side Supabase connection. Both paths have at most twelve seconds; the independent path starts early so authentication and catalogue reads share that budget rather than losing two seconds before recovery begins. Without database recovery credentials, one HTTP recovery begins after two seconds. The first successful read wins and the other is cancelled. Actions, orders and messages are never retried this way.
 
 The independent path executes the app's reviewed lookup handler and matching modules, pinned in `src/lib/catalogue-runtime/manifest.json`. It checks the called-number assignment, active retail organisation, SuperValu banner, current offer dates, source freshness and shop assortment exactly as the app does. It does not infer local stock from a national listing. Credentials stay in the worker environment. Bounded public cache refreshes may finish for other callers after their first caller cancels; private access reads remain cancellable.
 

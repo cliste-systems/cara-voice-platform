@@ -1,5 +1,7 @@
 import {requestedPackTotalQuote} from './retail_quantity_quote.js';
-import { departmentClarification } from './department_clarification.js';
+import {guardOfferEvidence} from './retail_offer_evidence.js';
+import {callerRequestsOfferDates,spokenVerifiedExpiry} from './retail_offer_expiry.js';
+import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
 import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
 import { llm, voice } from '@livekit/agents';
 import { z } from 'zod';
@@ -1042,7 +1044,7 @@ export class CaraTools {
         !/\b(?:rash|cream|bags?|sacks?|bins?|disposal)\b/i.test(callerNappiesQuery) &&
         !/\b(?:size\s*(?:[0-9]+|one|two|three|four|five|six|seven|eight|nine)|newborn|premature)\b/i.test(callerNappiesQuery) &&
         !/\b(?:examples?|any size|all sizes|rundown)\b/i.test(originalCallerQuery);
-      const broadQuestion = missingNappySize ? 'What size nappies do you need?' : departmentClarification(lookupQuery);
+      const broadQuestion = missingNappySize ? 'What size nappies do you need?' : callerInvitesExamples(originalCallerQuery) ? null : departmentClarification(lookupQuery);
       if (broadQuestion && rewardsPricePoint == null) {
         ud.sessionFlags.pendingProductRefinementClarification = true;
         ud.sessionFlags.pendingProductFulfilmentClarification = false;
@@ -1239,7 +1241,7 @@ export class CaraTools {
         const staleOffers = result.offersFreshness?.trim();
         return finish({
           ok: true,
-          message: CARA_CLARIFICATION_POLICY + '\n\n' + (staleOffers
+          message: (callerInvitesExamples(originalCallerQuery) ? 'The caller explicitly invited examples. Do not ask them to choose a department or product type. If these requested conditions cannot be verified, say that briefly; never invent qualifying offers. ' : CARA_CLARIFICATION_POLICY) + '\n\n' + (staleOffers
             ? `${staleOffers} ${result.noMatchQuote ?? 'No matching current result was returned for this request.'} Explain only the freshness limitation reported above. Do not infer that every department is missing, that the product is not sold, or that no offer exists. Offer a team check if the caller wants confirmation.`
             : (result.noMatchQuote ??
               'No matching product found in the catalogue. Do not claim the store does not stock it and do not guess. Say you cannot confirm that product from the catalogue you checked and offer to get a team member to ring back to confirm availability. If the caller wants that, collect the product description and their first name for the post-call callback.')),
@@ -1249,16 +1251,20 @@ export class CaraTools {
 
       ud.sessionFlags.callerWantsLowestPrice = false;
       ud.sessionFlags.callerLowestPriceOffersOnly = false;
+      result.matches = result.matches.map(guardOfferEvidence);
       const comparisonGuidance = wantsLowestPrice
         ? 'Give the lowest listed relevant price returned by this comparison, naming the exact pack/quantity. Compare counter per-kilo prices separately from packs. Do not call it the cheapest in-store or best value per burger without complete comparable data. Keep offers, membership conditions and local availability caveats. Answer the comparison now; do not ask them to choose a brand or counter versus packs when they asked you to compare.\n\n'
         : '';
       const formatted = result.matches
         .map((match) => [match.quote_text.trim(),
           requestedPackTotalQuote(originalCallerQuery,match),
-          match.current_price_eur === null ? 'No verified standalone price is supplied. Do not calculate a total below the advertised bundle minimum.' : '',
+          match.current_price_eur === null ? 'The requested quantity has no verified standalone total. Answer that you cannot confirm its total. Never prorate a bundle, even conditionally, or propose an illustrative total below the bundle minimum.' : '',
           match.is_on_offer === true && match.was_price_eur === null
             ? 'No usual/was price is supplied for this item. The single price is a current listed price, not a historical usual price. A bundle saving may only be compared with buying the same quantity at that listed single price.' : '',
-          match.offer_week_end ? `Verified expiry for this exact product: ${match.offer_week_end}.` : '',
+          match.offer_week_end && callerRequestsOfferDates(originalCallerQuery)
+            ? (spokenVerifiedExpiry(match.offer_week_end)
+              ? `Verified expiry for this exact product: ${spokenVerifiedExpiry(match.offer_week_end)}. Copy these date words exactly; do not add a weekday.`
+              : 'No verified public expiry date is supplied. Do not quote an open-ended placeholder as a real offer expiry.') : '',
           /\brewards\b|\bloyalty\b|\bmembers?\b/i.test(match.discount_label ?? '')
             ? 'Membership condition: this offer requires the stated Rewards membership. Never say the offer applies without it. A usual/was price is a reference price, not a verified current non-member shelf price.'
             : /\b(?:no|without)\b.*\b(?:rewards|card)\b/i.test(originalCallerQuery)
@@ -1285,7 +1291,7 @@ export class CaraTools {
       return finish({
         ok: true,
         ...(result.recoveryUsed ? {lookup_recovered:true} : {}),
-        message: `${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        message: `${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${!callerRequestsOfferDates(originalCallerQuery)?' The caller did not ask for an expiry date; do not volunteer dates or weekdays.':''}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
       });
     },

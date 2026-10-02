@@ -82,17 +82,18 @@ test('catalogue lookups retry transient failures once without retrying invalid r
   const originalFetch=globalThis.fetch;const originalUrl=process.env.CLISTE_APP_URL;const originalSecret=process.env.CLISTE_VOICE_WEBHOOK_SECRET;
   process.env.CLISTE_APP_URL='https://lookup.invalid';process.env.CLISTE_VOICE_WEBHOOK_SECRET='test-lookup';
   try {
-    for (const failure of ['timeout','503','401','400','always-timeout']) {
+    for (const failure of ['timeout','wrapped-timeout','503','401','400','always-timeout']) {
       let calls=0;
       globalThis.fetch=async () => {
         calls++;
         if ((failure==='timeout' && calls===1) || failure==='always-timeout') throw new DOMException('Timed out','AbortError');
+        if (failure==='wrapped-timeout' && calls===1) throw new Error('AbortError: request cancelled');
         if (calls===1 && /^\d+$/.test(failure)) return new Response(JSON.stringify({error:'test failure'}),{status:Number(failure)});
         return new Response(JSON.stringify({ok:true,matches:[{product_name:'Traditional Cooked Ham',current_price_eur:22}]}));
       };
       const result=await postSearchSupervaluProducts({called_number:'test-line',query:'Traditional Cooked Ham',intent:'offer'});
-      assert.equal(calls,['timeout','503','always-timeout'].includes(failure)?2:1,failure);
-      assert.equal(result.ok,['timeout','503'].includes(failure),failure);
+      assert.equal(calls,['timeout','wrapped-timeout','503','always-timeout'].includes(failure)?2:1,failure);
+      assert.equal(result.ok,['timeout','wrapped-timeout','503'].includes(failure),failure);
       if(failure==='always-timeout') {assert.deepEqual(result.matches,[]);assert.equal(result.error,'timeout');}
     }
   } finally {globalThis.fetch=originalFetch;if(originalUrl===undefined)delete process.env.CLISTE_APP_URL;else process.env.CLISTE_APP_URL=originalUrl;if(originalSecret===undefined)delete process.env.CLISTE_VOICE_WEBHOOK_SECRET;else process.env.CLISTE_VOICE_WEBHOOK_SECRET=originalSecret;}

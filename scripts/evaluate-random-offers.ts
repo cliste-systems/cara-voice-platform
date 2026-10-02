@@ -57,7 +57,7 @@ async function evaluateScenario(scenario:any){
    )))failures.push('sampled current offer not returned');
    if(toolResults.some(x=>x.body.clarification_required)) { /* Honest disambiguation assessed in review. */ }
   }
-  const membershipClaim=assistant.split(/[.!?](?:\s|$)/).some((sentence:string)=>/\brewards\b|\bloyalty\b|\bmembers?[- ]only\b/i.test(sentence)&& !/\b(?:does(?:n[’']t| not)\s+(?:say|state|show|list|mention|require)|is(?:n[’']t| not)\s+(?:listed|marked)|can(?:not|[’']t)\s+(?:confirm|see)|no\s+rewards?(?:\s+card)?\s+(?:is\s+mentioned|condition\s+(?:is\s+)?(?:shown|listed)))/i.test(sentence));
+  const membershipClaim=assistant.split(/[.!?](?:\s|$)/).some((sentence:string)=>/\brewards\b|\bloyalty\b|\bmembers?[- ]only\b/i.test(sentence)&& !/\b(?:does(?:n[’']t| not)\s+(?:say|state|show|list|mention|require)|is(?:n[’']t| not)\s+(?:listed|marked)|can(?:not|[’']t)\s+(?:confirm|see)|no\s+rewards?(?:[- ]card)?\s+(?:is\s+mentioned|(?:condition|requirement)\s+(?:is\s+)?(?:shown|listed|stated|mentioned)))/i.test(sentence));
   if(membershipClaim && turnTools.length && !turnTools.some(x=>(x.body.matches||[]).some((m:any)=>/\brewards\b|\bloyalty\b|\bmembers?\b/i.test(`${m.discount_label||''} ${m.quote_text||''}`))))failures.push('invented membership condition');
   if(/\*\*|^#+\s/m.test(assistant))failures.push('Markdown in spoken reply');
   if(/\bSV\s*(?:&|and)\s*CT\b/i.test(assistant))failures.push('internal retailer codes read aloud');

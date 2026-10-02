@@ -17,3 +17,11 @@ test('cancelling one caller does not abort a shared public catalogue refresh; pr
   assert.equal(signals[2]!.aborted,true,'tenant access reads remain cancellable');
  }finally{globalThis.fetch=oldFetch;for(const[k,v]of[['SUPABASE_URL',oldUrl],['SUPABASE_SERVICE_ROLE_KEY',oldKey]]as const){if(v===undefined)delete process.env[k];else process.env[k]=v;}}
 });
+test('the worker preserves a handler query deadline for optional enrichment',async()=>{
+ const original=globalThis.fetch;const oldUrl=process.env.SUPABASE_URL;const oldKey=process.env.SUPABASE_SERVICE_ROLE_KEY;
+ process.env.SUPABASE_URL='https://catalogue.invalid';process.env.SUPABASE_SERVICE_ROLE_KEY='test';
+ const query=new AbortController();let observed:AbortSignal|undefined;
+ globalThis.fetch=async(_input,init)=>{observed=init?.signal as AbortSignal;query.abort();assert.equal(observed.aborted,true);throw new DOMException('Query deadline','AbortError');};
+ try{const client=createAdminClient();await client.from('retail_catalog_products').select('id').abortSignal(query.signal);assert.equal(observed?.aborted,true);}
+ finally{globalThis.fetch=original;if(oldUrl===undefined)delete process.env.SUPABASE_URL;else process.env.SUPABASE_URL=oldUrl;if(oldKey===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=oldKey;}
+});
