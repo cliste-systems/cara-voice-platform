@@ -1,6 +1,6 @@
 import {requestedPackTotalQuote} from './retail_quantity_quote.js';
 import {namedPackLookupQuery} from './retail_lookup_query.js';
-import {guardOfferEvidence} from './retail_offer_evidence.js';
+import {guardOfferEvidence,spokenOfferMatches} from './retail_offer_evidence.js';
 import {callerRequestsOfferDates,spokenVerifiedExpiry} from './retail_offer_expiry.js';
 import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
 import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
@@ -1252,7 +1252,7 @@ export class CaraTools {
 
       ud.sessionFlags.callerWantsLowestPrice = false;
       ud.sessionFlags.callerLowestPriceOffersOnly = false;
-      result.matches = result.matches.map(guardOfferEvidence);
+      result.matches = spokenOfferMatches(result.matches.map(guardOfferEvidence),originalCallerQuery);
       const comparisonGuidance = wantsLowestPrice
         ? 'Give the lowest listed relevant price returned by this comparison, naming the exact pack/quantity. Compare counter per-kilo prices separately from packs. Do not call it the cheapest in-store or best value per burger without complete comparable data. Keep offers, membership conditions and local availability caveats. Answer the comparison now; do not ask them to choose a brand or counter versus packs when they asked you to compare.\n\n'
         : '';

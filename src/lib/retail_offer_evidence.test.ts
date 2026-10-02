@@ -1,5 +1,9 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {conflictingOfferVariant,guardOfferEvidence} from './retail_offer_evidence.js';
+import {conflictingOfferVariant,guardOfferEvidence,spokenOfferMatches} from './retail_offer_evidence.js';
+test('ordinary price replies have three examples while explicit full-list requests retain the results',()=>{
+ assert.deepEqual(spokenOfferMatches([1,2,3,4,5],'smoked salmon sealed packets'),[1,2,3]);
+ assert.deepEqual(spokenOfferMatches([1,2,3,4,5],'all the offers on smoked salmon'),[1,2,3,4,5]);
+});
 test('contradictory pizza styles and enumerated yogurt flavours cannot inherit bundles',()=>{
  assert.equal(conflictingOfferVariant('Goodfellas Deep Pan Pizza','2 for €6 Goodfellas Thin Pizza PMP'),true);
  assert.equal(conflictingOfferVariant('Activia 0% Raspberry','3 for €5 Activia Strawberry/Rhubarb/0%Vanilla'),true);

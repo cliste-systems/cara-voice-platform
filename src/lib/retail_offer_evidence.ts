@@ -4,6 +4,9 @@ import {formatSpokenEurAmount} from './catalogue-runtime/lib/spoken-eur-price.js
 // Only reject explicitly contradictory variant families. Generic range names
 // and omitted flavours do not establish a contradiction or eligibility.
 const families=[['thin','deep pan'],['raspberry','strawberry','rhubarb','vanilla'],['full fat','skimmed','semi skimmed']];
+export function spokenOfferMatches<T>(matches:T[],query:string):T[] {
+ return /\b(?:full list|all (?:the )?(?:offers|products|items)|every (?:offer|product|item))\b/i.test(query)?matches:matches.slice(0,3);
+}
 export function conflictingOfferVariant(name:string,label:string):boolean {
  const normalize=(s:string)=>s.toLowerCase().replace(/[-/]/g,' ').replace(/0%\s*/g,'').replace(/\s+/g,' ');
  const product=normalize(name),terms=normalize(label);
