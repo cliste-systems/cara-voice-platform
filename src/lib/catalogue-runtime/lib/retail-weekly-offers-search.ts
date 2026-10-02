@@ -1124,9 +1124,7 @@ async function fetchRetailWeeklyOffersForBanner(
   const reference = options?.reference ?? new Date();
   const pageSize = 1000;
   const rows: RetailWeeklyOfferRow[] = [];
-  let from = 0;
-
-  while (true) {
+  const readPage = async (from: number) => {
     let query = supabase
       .from("retail_weekly_offers")
       .select("*")
@@ -1149,16 +1147,25 @@ async function fetchRetailWeeklyOffersForBanner(
     const { data, error } = await query;
     if (error) throw new Error(error.message);
 
+    return (data ?? []) as RetailWeeklyOfferRow[];
+  };
+  let from = 0;
+  while (true) {
+    // The first page discovers small catalogues; subsequent pages overlap in bounded waves.
+    const starts = from === 0 ? [0] : [from, from + pageSize, from + 2 * pageSize];
+    const pages = await Promise.all(starts.map(readPage));
+    for (const data of pages) {
     const batch = filterRetailWeeklyOffersToActiveWeek(
-      (data ?? []) as RetailWeeklyOfferRow[],
+      data,
       reference,
     );
     rows.push(...batch);
     // Pagination must be based on rows fetched from Supabase, not rows that
     // survived active-week / price validation. Otherwise one invalid row on
     // page 1 can silently hide every later department from Cara.
-    if ((data ?? []).length < pageSize) break;
+    if (data.length < pageSize) return rows;
     from += pageSize;
+    }
   }
 
   return rows;
