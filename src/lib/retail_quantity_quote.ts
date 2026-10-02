@@ -23,7 +23,7 @@ export function requestedCounterWeightQuote(query:string,match:SearchSupervaluPr
 /** Supply arithmetic from verified pack terms rather than asking the model to calculate. */
 export function requestedPackTotalQuote(query:string,match:SearchSupervaluProductsMatch):string {
  const words:Record<string,number>={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10};
- const count=query.match(/\b(?:get|buy|take|for|pick up)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i)?.[1]?.toLowerCase();
+ const count=query.match(/\b(?:get|buy|take|for|pick up|need|want|order|would like)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b(?!\s*(?:kg|g|ml|cl|l|grams?|kilograms?|litres?|millilitres?)\b)/i)?.[1]?.toLowerCase();
  const n=count?(words[count]??Number(count)):0;
  const price=match.current_price_eur;
  const packEvidence=match.quote_text.replace(/Eligibility to mix different products is not verified[^.]*\.?/gi,'');
@@ -34,7 +34,12 @@ export function requestedPackTotalQuote(query:string,match:SearchSupervaluProduc
   return `Verified listed-price calculation for ${n} packs of this exact item: ${formatSpokenEurAmount(Math.round(price*100)*n/100)} at the supplied single price. This is not a verified offer or deal total; eligibility for the conflicting promotion is unverified. Do not recalculate or round this amount.`;
  }
  const bundle=parseRetailMultibuyLabel(match.discount_label);
- if(bundle?.quantity&&bundle.totalEur&&n%bundle.quantity===0)return `Verified calculation for ${n} packs of this exact item: ${formatSpokenEurAmount(Math.round(bundle.totalEur*100)*(n/bundle.quantity)/100)} altogether. This uses complete advertised bundles and does not infer a single-item price. Preserve any Rewards condition; local stock remains unverified.`;
+ if(bundle?.quantity&&bundle.totalEur&&n%bundle.quantity===0){
+  const totalCents=Math.round(bundle.totalEur*100)*(n/bundle.quantity);
+  const singleTotalCents=price!=null?Math.round(price*100)*n:null;
+  const comparison=singleTotalCents!=null&&singleTotalCents>totalCents?` Buying all ${n} packs at the listed single price would cost ${formatSpokenEurAmount(singleTotalCents/100)}; the saving for this requested quantity is ${formatSpokenEurAmount((singleTotalCents-totalCents)/100)}.`:'';
+  return `Verified calculation for ${n} packs of this exact item: ${formatSpokenEurAmount(totalCents/100)} altogether, using ${n/bundle.quantity} complete bundles of ${bundle.quantity} packs.${comparison} Do not recalculate these amounts. This does not infer a missing single-item price. Preserve any Rewards condition; local stock remains unverified.`;
+ }
  if(!price)return '';
  if(bundle&&(!bundle.quantity||!bundle.totalEur))return `At the verified listed single price, ${n} packs total ${formatSpokenEurAmount(Math.round(price*100)*n/100)} before any unverified multibuy discount. The multibuy discount or total is not supplied. Do not call this the offer total or say at least; a discount could reduce it. Preserve any membership condition.`;
  const cents=Math.round(price*100);const qty=bundle?.quantity;const bundleCents=bundle?.totalEur?Math.round(bundle.totalEur*100):0;

@@ -6,6 +6,15 @@ test('bundle and reference savings use exact cents rather than rounded euros',()
  assert.match(verifiedSavingsQuote({...m,current_price_eur:4,was_price_eur:5.29,discount_label:null}),/one euro twenty nine per item/);
  assert.doesNotMatch(verifiedSavingsQuote({...m,current_price_eur:null}),/one euro ninety eight/);
 });
+test('natural need/want phrasing supplies exact requested bundle totals and savings',()=>{
+ const m={product_name:'Crisps',department:'Food',sku:'1',score:1,quote_text:'Two for four euro',discount_label:'2 for €4',current_price_eur:2.5,fulfilment:'prepack'};
+ for(const q of ['I need 4 packs of crisps', 'I want four packs', 'I would like four packs']){
+  const quote=requestedPackTotalQuote(q,m);
+  assert.match(quote,/eight euro altogether, using 2 complete bundles of 2 packs/);
+  assert.match(quote,/would cost ten euro; the saving for this requested quantity is two euro/);
+ }
+ assert.equal(requestedPackTotalQuote('I need 4 kg of crisps',m),'');
+});
 test('loose counter portions use the verified kilo price rather than pack matching',()=>{
  const m={product_name:'Salmon',department:'Fish',sku:'1',score:1,quote_text:'twenty two euro forty nine per kilo',current_price_eur:22.49,fulfilment:'counter',price_basis:'per_kilo'};
  for(const q of ['two hundred grams','200 g','0.2 kg'])assert.match(requestedCounterWeightQuote(q,m),/four euro fifty/);
