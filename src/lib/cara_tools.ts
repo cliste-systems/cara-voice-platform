@@ -1,4 +1,5 @@
 import {requestedPackTotalQuote} from './retail_quantity_quote.js';
+import {namedPackLookupQuery} from './retail_lookup_query.js';
 import {guardOfferEvidence} from './retail_offer_evidence.js';
 import {callerRequestsOfferDates,spokenVerifiedExpiry} from './retail_offer_expiry.js';
 import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
@@ -991,7 +992,7 @@ export class CaraTools {
         ? cookingQuery.replace(/\b(?:offers?|deals?|specials?|this week)\b/gi, ' ').replace(/\s+/g, ' ').trim()
         : cookingQuery;
       const lookupQuery = wantsLowestPrice && !callerRequestsLowestPrice(comparisonQuery)
-        ? `cheapest ${comparisonQuery}`.slice(0, 120) : comparisonQuery;
+        ? `cheapest ${comparisonQuery}`.slice(0, 120) : namedPackLookupQuery(comparisonQuery);
       const queryFulfilment = inferExplicitProductFulfilment(trimmed);
       const queryServiceArea = inferExplicitProductServiceArea(trimmed);
       const callerFulfilment = ud.sessionFlags.callerCatalogQuery
