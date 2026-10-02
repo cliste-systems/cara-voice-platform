@@ -1,6 +1,6 @@
 /** A department names a place to look, not the caller's product preference. */
 const DEPARTMENTS = new Set([
-  'alcohol', 'alcoholic drinks', 'drinks', 'off licence', 'off license',
+  'soft drink', 'soft drinks', 'fizzy drink', 'fizzy drinks', 'non alcoholic drinks', 'alcohol', 'alcoholic drinks', 'drinks', 'off licence', 'off license',
   'meat', 'butcher', 'butchers', 'deli', 'delicatessen', 'fish', 'seafood',
   'bakery', 'dairy', 'produce', 'fruit', 'veg', 'vegetables', 'fruit veg', 'fruit vegetables',
   'frozen', 'frozen food', 'household', 'cleaning', 'baby', 'baby care', 'pet', 'pets', 'pet food',

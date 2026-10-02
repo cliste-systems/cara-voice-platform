@@ -255,7 +255,10 @@ export async function searchNationalRetailCatalog(
     .sort((a, b) => b.length - a.length);
 
   let candidateRows: NationalCatalogRow[] = [];
-  for (const candidate of candidateTokens) {
+  // Fetch small waves together: absent multiword products must not serialize every token.
+  // Still check every candidate before concluding no match, preserving fuzzy name recovery.
+  for (let start = 0; start < candidateTokens.length; start += 3) {
+    const wave = await Promise.all(candidateTokens.slice(start, start + 3).map(async (candidate) => {
     const project = (supabase as unknown as {supabaseUrl?: string}).supabaseUrl;
     const key = project ? `${project}:${input.retailBanner}:${input.serviceArea ?? "all"}:${input.fulfilment ?? "all"}:${candidate}` : null;
     const rows = await loadNationalCandidateRows(key, async () => {
@@ -298,8 +301,11 @@ export async function searchNationalRetailCatalog(
       const text = normalizeSearchText(`${row.product_name} ${row.department}`);
       return productTokens.length === 0 || productTokens.every((token) => retailSearchTokenMatchesText(text, token));
     });
-    if (relevantRows.length > 0) {
-      candidateRows = relevantRows;
+    return relevantRows;
+    }));
+    const firstMatch = wave.find((rows) => rows.length > 0);
+    if (firstMatch) {
+      candidateRows = firstMatch;
       break;
     }
   }

@@ -1281,6 +1281,15 @@ export class CaraTools {
       ud.sessionFlags.callerWantsLowestPrice = false;
       ud.sessionFlags.callerLowestPriceOffersOnly = false;
       result.matches = spokenOfferMatches(result.matches.map(guardOfferEvidence),originalCallerQuery);
+      const rangeOnly=(!resolvedIntent||resolvedIntent==='stock')&&!/\b(?:price|cost|how much|offers?|deals?|reduced|saving|rewards|multibuys?)\b/i.test(originalCallerQuery);
+      if(rangeOnly)result.matches=result.matches.map(match=>{
+        const rangeMatch={...match};
+        delete rangeMatch.current_price_eur;
+        delete rangeMatch.was_price_eur;
+        delete rangeMatch.discount_label;
+        delete rangeMatch.is_on_offer;
+        return rangeMatch;
+      });
       const comparisonGuidance = wantsLowestPrice
         ? 'Give the lowest listed relevant price returned by this comparison, naming the exact pack/quantity. Compare counter per-kilo prices separately from packs. Do not call it the cheapest in-store or best value per burger without complete comparable data. Keep offers, membership conditions and local availability caveats. Answer the comparison now; do not ask them to choose a brand or counter versus packs when they asked you to compare.\n\n'
         : '';
@@ -1317,7 +1326,7 @@ export class CaraTools {
       const offerPrefix =
         resolvedIntent === 'offer'
           ? 'Use only these current offer quotes. If a quote flags unverified eligibility or a conflicting flavour/pack, do not say that the requested item qualifies. Do not transfer a price to a different flavour or pack. Never speculate that a current conflicting listing is an old deal. For multibuys, state the quantity and total bundle price; never imply the bundle price is for one item. Preserve Rewards membership, mix-and-match, pack size, counter/pre-pack and date conditions. Mention a saving or usual price only when supplied. Only when the caller explicitly requested a rundown or examples, give a few useful examples across the requested scope; do not imply the examples are the entire offer range. Never quote offers from memory.'
-          : 'Use this guidance — speak prices in natural Irish words exactly as given, in your own words. A national catalogue match confirms national range only; claim local availability only if the returned quote explicitly confirms it. Never quote offers from memory.';
+          : 'Keep every amount exact, including every cent, using the provided spoken price words. You may rephrase the surrounding sentence; never round prices. A national catalogue match confirms national range only; claim local availability only if the returned quote explicitly confirms it. Never quote offers from memory.';
 
       const freshnessNote = result.offersFreshness?.trim()
         ? `${result.offersFreshness.trim()}\n\n`
@@ -1326,7 +1335,7 @@ export class CaraTools {
       return finish({
         ok: true,
         ...(result.recoveryUsed ? {lookup_recovered:true} : {}),
-        message: `${temporalGuidance}${mixingGuidance}${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${!callerRequestsOfferDates(originalCallerQuery)?' The caller did not ask for an expiry date; do not volunteer dates or weekdays.':''}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        message: `${rangeOnly?'The caller asked about the national range only. Answer whether the exact product is listed and preserve the local availability caveat. Do not volunteer a price or deal. ':''}${temporalGuidance}${mixingGuidance}${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${!callerRequestsOfferDates(originalCallerQuery)?' The caller did not ask for an expiry date; do not volunteer dates or weekdays.':''}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
       });
     },

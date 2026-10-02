@@ -1,5 +1,5 @@
 {
-  "app_commit": "e7ac70923cc03eb5b7a6c3cb19961616c1e79f5e",
+  "app_commit": "08de41f9216df539e8dba8f498f1cd0dfe44150e",
   "files": {
     "app/api/voice/search-supervalu-products/route": "8541c65feb30614c147f8819d09ae3e01e0a2cc9773f0655c9ec7499b3a06767",
     "lib/booking-reference": "087be8411c7113dbd2636bcd20ef86344a59456c458c53e0c3d6d1a3dfe32bd3",
@@ -16,7 +16,7 @@
     "lib/spoken-eur-price": "8de2ad93399c63d4b8770d562a9f8c53a15197f285698cd4a585b5b718546f91",
     "lib/supervalu-catalog-search": "371c5238124106c30ac042b4362923889b11e7ca9fc6b38de5807b3980acb7db",
     "lib/supervalu-gateway": "73e3ab6b38d3880969a0ba5379a46b39c2a150cda1cd37654248e9899f521f43",
-    "lib/retail-catalog-search": "7dc3a79245dd9b872ba890aee77e4cabd7daddbd2b93b3f2a47a1be2ee2bb071",
+    "lib/retail-catalog-search": "16146b9567d7eb878a982fbe6e7fc22236a4a0878246bdde93e7b6eb7e1ca9de",
     "lib/retail-product-clarification": "4e3b8bd4d6ba10ac6d7500adcd26dc4befae62a3f24b7dd4cc7dc31e9d5eaed9",
     "lib/voice-webhook-auth": "2a4922374e311865d638b85046350875f63c62f67a60de150bdcafc16e29df1c",
     "lib/timing-safe-equal": "84e0c1e3b537b729fad6622cdde30d1a67c4884abb4a59dd2fa44b0207652246",
@@ -34,7 +34,7 @@
     "lib/retail-price-presentation": "a4c0739f388ef146456da96a746523d3ecf1e01fedc384a9b9f76bf3bf2dd1a9",
     "lib/spoken-eur-price": "ce34f587db85567bb96655e64ec7d249ce46a37f01ca0b8964831ad2ad6aea25",
     "lib/supervalu-gateway": "00809fbf53cf76eea351b7b00c744964cef3470d73bd19b43fefa0877b0eaced",
-    "lib/retail-catalog-search": "fdc10a8fd972ff4cb30743c1f4db1c8c4fbef1aece4208903256cd0cccedf6b3",
+    "lib/retail-catalog-search": "773e0fe50c94d0a468cf96c7b4a2dcc2e16e3568259f21395cc513af296e73b1",
     "lib/supervalu-catalog-search": "6f3b448ce86f27d089681b22c69f2ccf70c49e4ecea113401086ef16ec8b9205",
     "lib/retail-promotion-search": "f07e3fbff1fa117fc57f703de41f79ef93d727ea2921747ec986e88f760fabce",
     "lib/retail-weekly-offers-search": "23da30add8be2a4f620f6dcb8a1c813cfc00fc54b7fa6ab3982673ffc3ad85aa",

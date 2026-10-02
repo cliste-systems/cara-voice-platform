@@ -4,7 +4,7 @@ import {departmentClarification} from './department_clarification.js';
 it('asks for a product preference across the whole shop, not just alcohol',()=>{
  assert.match(departmentClarification('Any dog food deals?')??'',/dry or wet/);
  assert.equal(departmentClarification('adult dog dry kibble, no cat food'),null);
- for(const query of ['any offers','any toiletries on offer','cosmetics offers','personal hygiene offers','alcohol department offers','off-licence offers','bakery offers','dairy offers','deli counter offers','meat counter offers','fish offers','fruit and veg offers','frozen food offers','household offers','baby offers','pet food offers','health and beauty offers','personal care offers','food cupboard offers','electrical department offers'])assert.ok(departmentClarification(query),query);
+ for(const query of ['any offers','any soft drink deals','soft drinks offers','fizzy drinks deals','any toiletries on offer','cosmetics offers','personal hygiene offers','alcohol department offers','off-licence offers','bakery offers','dairy offers','deli counter offers','meat counter offers','fish offers','fruit and veg offers','frozen food offers','household offers','baby offers','pet food offers','health and beauty offers','personal care offers','food cupboard offers','electrical department offers'])assert.ok(departmentClarification(query),query);
 });
 it('allows meaningful product preferences and explicit invitations to choose',()=>{
  for(const query of ['Choose one verified offer from bakery and one from household, any items are fine.','Any department is fine.','any items are fine'])assert.equal(departmentClarification(query),null,query);

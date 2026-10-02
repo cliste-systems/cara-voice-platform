@@ -101,6 +101,12 @@ describe('CaraTools current-offer lookup', () => {
     assert.equal(params.parse({query,intent:'offer'}).query,query);
   });
 
+  it('range-only questions do not expose unrelated price fields for the model to round', async () => {
+    const {result}=await lookup('Is Loose Boned Kippers 1 kg on the national range?',{ok:true,matches:[{product_name:'Loose Boned Kippers (1 kg)',department:'Fish',sku:'kippers',score:1,quote_text:'Listed nationally; local stock is not confirmed.',current_price_eur:13.99,was_price_eur:null,discount_label:null}]});
+    assert.match(result.message,/Do not volunteer a price or deal/);
+    assert.equal('current_price_eur' in result.matches![0]!,false);
+  });
+
   it('asks for nappy size before listing and does not inherit an assistant-suggested brand', async () => {
     const {requests,result}=await lookup('Pampers nappies',{ok:true,matches:[{product_name:'Huggies Size 2',quote_text:'Eight euro.',score:1}]},[],'Pampers Baby Dry nappies Size 2',{callerQuery:'Nappies please',followUpCallerQuery:'Size two'});
     assert.equal(requests.length,1);
