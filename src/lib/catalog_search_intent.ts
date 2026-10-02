@@ -105,8 +105,9 @@ function inferWeeklyOffersBrowseCategories(query: string): string[] {
 
 export function trackCallerCatalogSearchIntent(
   text: string,
-  flags: { callerAskedAboutOffers?: boolean; callerWantsLowestPrice?: boolean; callerLowestPriceOffersOnly?: boolean; callerBarbecueCooking?: boolean; callerMeatPreference?: boolean; rewardsPricePoint?: number | null },
+  flags: { callerCatalogQuery?: string; callerAskedAboutOffers?: boolean; callerWantsLowestPrice?: boolean; callerLowestPriceOffersOnly?: boolean; callerBarbecueCooking?: boolean; callerMeatPreference?: boolean; rewardsPricePoint?: number | null },
 ): void {
+  flags.callerCatalogQuery = text;
   const t = text.toLowerCase();
   if (/\b(?:vegetarian|vegan|meat[- ]free|plant[- ]based)\b/i.test(text)) flags.callerMeatPreference = false;
   else if (/\bmeat\b/i.test(text)) flags.callerMeatPreference = true;

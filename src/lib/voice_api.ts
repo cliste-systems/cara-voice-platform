@@ -405,6 +405,22 @@ export type SearchSupervaluProductsMatch = {
   fulfilment?: string | null;
 };
 
+/** One bounded retry is safe for a read-only catalogue lookup, never for action webhooks. */
+async function postCatalogLookupWebhook<T>(payload: SearchSupervaluProductsPayload): Promise<{res: Response; body: T}> {
+  const attemptTimeout = Number.isFinite(HTTP_FETCH_TIMEOUT_MS) ? Math.min(HTTP_FETCH_TIMEOUT_MS,6000) : 6000;
+  for (let attempt=0;attempt<2;attempt++) {
+    try {
+      const result=await postVoiceWebhook<T>('/api/voice/search-supervalu-products',payload,attemptTimeout);
+      if (attempt===0 && [502,503,504].includes(result.res.status)) continue;
+      return result;
+    } catch (error) {
+      const transient=error instanceof TypeError || (error instanceof Error && ['AbortError','TimeoutError'].includes(error.name));
+      if (attempt===1 || !transient) throw error;
+    }
+  }
+  throw new Error('Catalogue retry exhausted');
+}
+
 export async function postSearchSupervaluProducts(
   payload: SearchSupervaluProductsPayload,
 ): Promise<{
@@ -421,7 +437,7 @@ export async function postSearchSupervaluProducts(
   }
 
   try {
-    const { res, body } = await postVoiceWebhook<{
+    const { res, body } = await postCatalogLookupWebhook<{
       ok?: boolean;
       matches?: SearchSupervaluProductsMatch[];
       browse_categories?: string[] | null;
@@ -429,7 +445,7 @@ export async function postSearchSupervaluProducts(
       clarification_hint?: string | null;
       offers_freshness?: string | null;
       error?: string;
-    }>('/api/voice/search-supervalu-products', payload);
+    }>(payload);
 
     if (!res.ok) {
       return {

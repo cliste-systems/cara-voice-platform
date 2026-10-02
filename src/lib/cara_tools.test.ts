@@ -38,6 +38,7 @@ describe('CaraTools current-offer lookup', () => {
     response: Record<string, unknown>,
     replies: Record<string, unknown>[] = [],
     followUp?: string,
+    scope: {service_area?: "grocery"; fulfilment?: "prepack"; callerQuery?: string} = {},
   ) {
     const requests: Array<Record<string, unknown>> = [];
     const previousFetch = globalThis.fetch;
@@ -59,12 +60,12 @@ describe('CaraTools current-offer lookup', () => {
           userData: {
             organizationId: 'test-org',
             calledNumber: 'test-line',
-            sessionFlags: {},
+            sessionFlags: {callerCatalogQuery: scope.callerQuery},
           },
           session: { currentAgent: {} },
         },
       } as unknown as Parameters<typeof tool.execute>[1];
-      let result = await tool.execute({ query }, context) as {
+      let result = await tool.execute({ query, ...(scope.service_area ? {service_area:scope.service_area} : {}), ...(scope.fulfilment ? {fulfilment:scope.fulfilment} : {}) }, context) as {
         ok: boolean;
         message: string;
         matches?: Array<{ product_name: string }>;
@@ -79,6 +80,21 @@ describe('CaraTools current-offer lookup', () => {
       else process.env.CLISTE_VOICE_WEBHOOK_SECRET = previousSecret;
     }
   }
+
+  it('does not hide named meat, dairy or bakery offers behind a guessed grocery filter', async () => {
+    for (const query of ['SuperValu Fresh Irish Chicken Fillets Large Pack (1 kg)', 'Galtee Cheese (200 g)', 'SuperValu Chocolate Muffins']) {
+      const {requests}=await lookup(query,{ok:true,matches:[{product_name:query,quote_text:'Current offer two euro.',score:1}]},[],undefined,{service_area:'grocery',callerQuery:`Any offer on ${query}?`});
+      assert.equal(requests[0]?.service_area,undefined,query);
+    }
+  });
+
+  it('preserves the original caller scope even when the model drops it from the product query', async () => {
+    const explicit=await lookup('coffee',{ok:true,matches:[{product_name:'coffee',quote_text:'two euro',score:1}]},[],undefined,{service_area:'grocery',callerQuery:'coffee from the grocery section'});
+    assert.equal(explicit.requests[0]?.service_area,'grocery');
+    const counter=await lookup('salmon',{ok:true,matches:[{product_name:'salmon',quote_text:'twelve euro per kilo',score:1}]},[],undefined,{service_area:'grocery',fulfilment:'prepack',callerQuery:'Any salmon at the fish counter?'});
+    assert.equal(counter.requests[0]?.service_area,'fish');
+    assert.equal(counter.requests[0]?.fulfilment,'counter');
+  });
 
   it('uses the caller preference after a broad question instead of looping', async () => {
     const {requests,result}=await lookup('alcohol offers',{ok:true,matches:[{product_name:'Lager',score:1,quote_text:'Lager four pack for eight euro.'}]},[],'lager');

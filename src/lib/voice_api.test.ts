@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { buildCloseDiagnosticsPayload } from './call_close_diagnostics.js';
-import { postCallComplete, type CallCompletePayload } from './voice_api.js';
+import { postSearchSupervaluProducts, postCallComplete, type CallCompletePayload } from './voice_api.js';
 
 test('completed production calls preserve raw dialogue, tool errors, and final diagnostics in the webhook', async () => {
   const previousFetch = globalThis.fetch;
@@ -75,4 +75,25 @@ test('completed production calls preserve raw dialogue, tool errors, and final d
     if (previousSecret === undefined) delete process.env.CLISTE_VOICE_WEBHOOK_SECRET;
     else process.env.CLISTE_VOICE_WEBHOOK_SECRET = previousSecret;
   }
+});
+
+
+test('catalogue lookups retry transient failures once without retrying invalid requests', async () => {
+  const originalFetch=globalThis.fetch;const originalUrl=process.env.CLISTE_APP_URL;const originalSecret=process.env.CLISTE_VOICE_WEBHOOK_SECRET;
+  process.env.CLISTE_APP_URL='https://lookup.invalid';process.env.CLISTE_VOICE_WEBHOOK_SECRET='test-lookup';
+  try {
+    for (const failure of ['timeout','503','401','400','always-timeout']) {
+      let calls=0;
+      globalThis.fetch=async () => {
+        calls++;
+        if ((failure==='timeout' && calls===1) || failure==='always-timeout') throw new DOMException('Timed out','AbortError');
+        if (calls===1 && /^\d+$/.test(failure)) return new Response(JSON.stringify({error:'test failure'}),{status:Number(failure)});
+        return new Response(JSON.stringify({ok:true,matches:[{product_name:'Traditional Cooked Ham',current_price_eur:22}]}));
+      };
+      const result=await postSearchSupervaluProducts({called_number:'test-line',query:'Traditional Cooked Ham',intent:'offer'});
+      assert.equal(calls,['timeout','503','always-timeout'].includes(failure)?2:1,failure);
+      assert.equal(result.ok,['timeout','503'].includes(failure),failure);
+      if(failure==='always-timeout') {assert.deepEqual(result.matches,[]);assert.equal(result.error,'timeout');}
+    }
+  } finally {globalThis.fetch=originalFetch;if(originalUrl===undefined)delete process.env.CLISTE_APP_URL;else process.env.CLISTE_APP_URL=originalUrl;if(originalSecret===undefined)delete process.env.CLISTE_VOICE_WEBHOOK_SECRET;else process.env.CLISTE_VOICE_WEBHOOK_SECRET=originalSecret;}
 });

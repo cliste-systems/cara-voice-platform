@@ -117,6 +117,8 @@ export type CaraSessionFlags = {
   callerLowestPriceOffersOnly?: boolean;
   callerBarbecueCooking?: boolean;
   callerMeatPreference?: boolean;
+  /** Latest original caller words, used to distinguish explicit scope from model defaults. */
+  callerCatalogQuery?: string;
   /** Exact Rewards/Real Rewards price point from the latest caller turn. */
   rewardsPricePoint?: number | null;
   /** One-time alcohol age reminder already given this call. */
@@ -982,17 +984,25 @@ export class CaraTools {
         ? `cheapest ${comparisonQuery}`.slice(0, 120) : comparisonQuery;
       const queryFulfilment = inferExplicitProductFulfilment(trimmed);
       const queryServiceArea = inferExplicitProductServiceArea(trimmed);
+      const callerFulfilment = ud.sessionFlags.callerCatalogQuery
+        ? inferExplicitProductFulfilment(ud.sessionFlags.callerCatalogQuery) : undefined;
+      const callerServiceArea = ud.sessionFlags.callerCatalogQuery
+        ? inferExplicitProductServiceArea(ud.sessionFlags.callerCatalogQuery) : undefined;
+      // "grocery" is a real narrow department, not the default for a packaged
+      // product. A guessed default hid chicken, steak and other departments.
+      const groundedModelServiceArea = modelServiceArea === 'grocery' && !queryServiceArea && !callerServiceArea
+        ? undefined : modelServiceArea;
       // A comparison must span packs and counters unless the caller/query scoped it.
       // Backend models sometimes fill optional fields with guessed grocery/prepack defaults.
       const effectiveFulfilment: RetailProductFulfilment | undefined =
-        queryFulfilment ??
+        callerFulfilment ?? queryFulfilment ??
         (wantsLowestPrice ? undefined : fulfilment) ??
         ((pendingFulfilmentClarification || callerProvidedRefinement)
           ? wantsLowestPrice ? inferExplicitProductFulfilment(pendingProductQuery ?? '') : pendingState?.fulfilment
           : undefined);
       const effectiveServiceArea: RetailProductServiceArea | undefined =
-        queryServiceArea ??
-        (wantsLowestPrice ? undefined : modelServiceArea) ??
+        callerServiceArea ?? queryServiceArea ??
+        (wantsLowestPrice ? undefined : groundedModelServiceArea) ??
         (pendingFulfilmentClarification || pendingRefinementClarification
           ? wantsLowestPrice ? inferExplicitProductServiceArea(pendingProductQuery ?? '') : pendingState?.serviceArea
           : undefined);
