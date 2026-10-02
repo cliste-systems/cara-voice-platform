@@ -51,6 +51,11 @@ export const GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS =
   'When asked for examples from named departments, search those departments and give verified examples now. Keep exclusions in the query. A product single price remains the price for one unless the source explicitly makes it conditional. A minimum bundle quantity with no bundle total does not establish a conditional unit price. Do not answer yes to mix and match unless verified for those items: explain when a bundle is listed but mixing eligibility is unknown. Do not repeat a local stock disclaimer or offer a callback after every price; give it once when relevant. Never pronounce SV and CT, including when that text appears in a raw label. ' +
   'On the first alcohol answer, mention they must be 18 or over.';
 
+export function gptLiveRetailBackendInstructions(reference = new Date()): string {
+  const day = new Intl.DateTimeFormat('en-CA', {timeZone:'Europe/Dublin',year:'numeric',month:'2-digit',day:'2-digit'}).format(reference);
+  return `${GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS} Today is ${day} in Europe/Dublin. Interpret this week, last Thursday and this Sunday relative to that date. Current offers do not establish historical or future offers. If asked about expiry, use the returned offer_week_end for the exact product; do not assume all offers share a date.`;
+}
+
 function describeOpening(greetingText: string): string {
   return `${GPT_LIVE_RETAIL_VOICE_STYLE} Say this now, word for word, with nothing before or after it: "${greetingText.trim()}"`;
 }
@@ -626,7 +631,7 @@ export function createGptLiveRetailModel(): ResolvedGptLiveRetailModel | null {
     voice,
     responsesOptions: {
       model: backendModel,
-      instructions: GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS,
+      instructions: gptLiveRetailBackendInstructions(),
     },
   });
   const audioConfig = resolveGptLiveAudioConfig();

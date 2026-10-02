@@ -6,7 +6,7 @@ import OpenAI from 'openai';
 import {llm} from '@livekit/agents';
 import {CaraTools} from '../src/lib/cara_tools.js';
 import {trackCallerCatalogSearchIntent} from '../src/lib/catalog_search_intent.js';
-import {GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS} from '../src/lib/gpt_live_retail.js';
+import {gptLiveRetailBackendInstructions} from '../src/lib/gpt_live_retail.js';
 import {evaluateTextRehearsalExpectations} from '../src/lib/text_rehearsal.js';
 const path=process.argv[2]||'call-transcripts/random-offers-50/scenarios.json';
 const scenarios=JSON.parse(readFileSync(path,'utf8'));
@@ -29,12 +29,12 @@ for(const scenario of scenarios){
   for(let turn=0;turn<scenario.turns.length;turn++){
   trackCallerCatalogSearchIntent(scenario.turns[turn],flags);
   const turnToolStart=toolResults.length;
-  let response=await client.responses.create({model,instructions:GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS,...(previousResponseId?{previous_response_id:previousResponseId}:{}),input:scenario.turns[turn],tools,max_output_tokens:750});
+  let response=await client.responses.create({model,instructions:gptLiveRetailBackendInstructions(),...(previousResponseId?{previous_response_id:previousResponseId}:{}),input:scenario.turns[turn],tools,max_output_tokens:750});
   for(let round=0;round<4;round++){
    const calls=response.output.filter(x=>x.type==='function_call');if(!calls.length)break;
    const outputs=[];
    for(const call of calls){const args=(productionTool.parameters as any).parse(JSON.parse(call.arguments));const started=Date.now();const body=await productionTool.execute(args,context) as any;toolResults.push({name:call.name,args,elapsed_ms:Date.now()-started,body});if(body.ok===false)failures.push('lookup failed: '+body.message);outputs.push({type:'function_call_output' as const,call_id:call.call_id,output:JSON.stringify(body)});}
-   response=await client.responses.create({model,instructions:GPT_LIVE_RETAIL_BACKEND_INSTRUCTIONS,previous_response_id:response.id,input:outputs,tools,max_output_tokens:750});
+   response=await client.responses.create({model,instructions:gptLiveRetailBackendInstructions(),previous_response_id:response.id,input:outputs,tools,max_output_tokens:750});
   }
   assistant=response.output_text;
   if(!assistant.trim())failures.push(`turn ${turn+1}: missing assistant reply`);
@@ -57,7 +57,7 @@ for(const scenario of scenarios){
    )))failures.push('sampled current offer not returned');
    if(toolResults.some(x=>x.body.clarification_required)) { /* Honest disambiguation assessed in review. */ }
   }
-  const membershipClaim=assistant.split(/[.!?](?:\s|$)/).some((sentence:string)=>/\brewards\b|\bloyalty\b|\bmembers?[- ]only\b/i.test(sentence)&& !/\b(?:does(?:n[’']t| not)\s+(?:say|state|show|list|mention|require)|is(?:n[’']t| not)\s+(?:listed|marked)|can(?:not|[’']t)\s+(?:confirm|see)|no\s+rewards?\s+card\s+is\s+mentioned)/i.test(sentence));
+  const membershipClaim=assistant.split(/[.!?](?:\s|$)/).some((sentence:string)=>/\brewards\b|\bloyalty\b|\bmembers?[- ]only\b/i.test(sentence)&& !/\b(?:does(?:n[’']t| not)\s+(?:say|state|show|list|mention|require)|is(?:n[’']t| not)\s+(?:listed|marked)|can(?:not|[’']t)\s+(?:confirm|see)|no\s+rewards?(?:\s+card)?\s+(?:is\s+mentioned|condition\s+(?:is\s+)?(?:shown|listed)))/i.test(sentence));
   if(membershipClaim && turnTools.length && !turnTools.some(x=>(x.body.matches||[]).some((m:any)=>/\brewards\b|\bloyalty\b|\bmembers?\b/i.test(`${m.discount_label||''} ${m.quote_text||''}`))))failures.push('invented membership condition');
   if(/\*\*|^#+\s/m.test(assistant))failures.push('Markdown in spoken reply');
   if(/\bSV\s*(?:&|and)\s*CT\b/i.test(assistant))failures.push('internal retailer codes read aloud');
