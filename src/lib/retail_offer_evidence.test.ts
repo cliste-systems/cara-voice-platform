@@ -1,5 +1,25 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {conflictingOfferVariant,guardOfferEvidence,spokenOfferMatches} from './retail_offer_evidence.js';
+import {conflictingOfferVariant,guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor} from './retail_offer_evidence.js';
+test('White Grenache in the rose category cannot win a white-wine comparison',()=>{
+ const m={product_name:'Gallo Family White Grenache',department:'Rose',sku:'1',score:1,quote_text:'Listed'};
+ assert.equal(matchesRequestedWineColor('cheapest white wine, no red wine',m),false);
+ assert.equal(matchesRequestedWineColor('white wine or rosé',m),true);
+ assert.equal(matchesRequestedWineColor('Gallo Family White Grenache',m),true);
+});
+test('a named beer pack must distinguish regular and alcohol-free versions',()=>{
+ const base={department:'Beer',sku:'1',score:1,quote_text:'Listed'};
+ const matches=[{...base,product_name:'Guinness Draught 0.0% Can 8 Pack',is_alcohol:false},{...base,product_name:'Guinness Draught Stout Can 8 Pack',is_alcohol:true}];
+ assert.ok(alcoholVariantQuestion('Guinness Draught eight pack not Nitrosurge',matches));
+ assert.equal(alcoholVariantQuestion('regular Guinness Draught eight pack',matches),null);
+ assert.equal(alcoholVariantQuestion('Guinness 0.0 eight pack',matches),null);
+});
+test('dietary lookups cannot return ordinary meat or infer dietary suitability from a brand',()=>{
+ const base={department:'Frozen',sku:'1',score:1,quote_text:'Listed',product_name:'Irish Beef Burgers'};
+ assert.equal(matchesRequestedDietLabel('vegan frozen burgers',base),false);
+ assert.equal(matchesRequestedDietLabel('vegan frozen burgers',{...base,product_name:'Vegan Frozen Burgers'}),true);
+ assert.equal(matchesRequestedDietLabel('gluten-free bread',{...base,department:'Gluten Free Bread',product_name:'Genius Bread'}),true);
+ assert.equal(matchesRequestedDietLabel('dairy-free ice cream',{...base,product_name:'Standard Ice Cream'}),false);
+});
 test('ordinary price replies have three examples while explicit full-list requests retain the results',()=>{
  assert.deepEqual(spokenOfferMatches([1,2,3,4,5],'smoked salmon sealed packets'),[1,2,3]);
  assert.deepEqual(spokenOfferMatches([1,2,3,4,5],'all the offers on smoked salmon'),[1,2,3,4,5]);

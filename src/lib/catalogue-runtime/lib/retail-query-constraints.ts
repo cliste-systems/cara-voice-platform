@@ -3,6 +3,8 @@
 /** Keep exclusions out of positive matching, but enforce them on candidates. */
 export function positiveRetailQuery(query: string): string {
   return query
+    .replace(/\b(\d+(?:[.,]\d+)?)\s*(ml|cl|kg|g|l)\b/gi, "$1 $2")
+    .replace(/\b(?:regular|normal|alcoholic)\b/gi, word => /\b(?:guinness|beer|lager|stout|cider)\b/i.test(query) ? " " : word)
     .replace(/\b(?:to|for)\s+(?:boil(?:ing)?|cook(?:ing)?)\s+(?:it\s+)?myself\b/gi, " ")
     .replace(/\b(?:that\s+)?(?:expir(?:e|es|ing)|end(?:s|ing)?)\b.*?(?:this Sunday|\d{4}-\d{2}-\d{2})/gi, " ")
     .replace(/\b(?:not|no(?!\s+(?:drain|added\s+sugar|artificial\s+(?:colours?|colors?|flavou?rs?)))|without|excluding|except|rather than)\s+(?:the\s+)?[^,.!?;]+/gi, " ")
@@ -17,6 +19,7 @@ export function positiveRetailQuery(query: string): string {
 export function matchesRetailQueryConstraints(query: string, name: string, category = ""): boolean {
   const text = `${name} ${category}`.toLowerCase();
   const positive = positiveRetailQuery(query);
+  if (/\b(?:regular|normal|alcoholic)\b/i.test(query) && /\b(?:guinness|beer|lager|stout|cider)\b/i.test(query) && /0[.,]0|alcohol[- ]free|non[- ]?alcoholic/i.test(name)) return false;
   if (/\badult\b/i.test(query) && /\bdogs?\b/i.test(query) && (!/\badult\b/i.test(text) || /\b(?:puppy|puppies)\b/i.test(name))) return false;
   if (/\bwhisk(?:e)?y\b/i.test(positive) && !/\bwhisk(?:e)?y\b/i.test(text)) return false;
   if (/\bminiatures?\b/i.test(positive)) {
@@ -49,6 +52,7 @@ export function matchesRetailQueryConstraints(query: string, name: string, categ
       [/\baerosol\b/i, /\b(?:aerosol|spray)\b/i],
       [/\bprotein bars?\b/i, /\bbar(?:s)?\b/i],
       [/\b(?:microwave rice|ready meals?)\b/i, /\b(?:microwave|ready meal)\b/i],
+      [/\bnitrosurge\b/i, /\bnitrosurge\b/i],
     ] as [RegExp, RegExp][]) if (words.test(clause) && candidate.test(text)) return false;
   }
   if (/\b(?:stout|lager)\b/i.test(positiveRetailQuery(query)) && /\bcans?\b/i.test(query)) {

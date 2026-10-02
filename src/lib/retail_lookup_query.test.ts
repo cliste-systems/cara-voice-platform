@@ -1,5 +1,10 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {namedPackLookupQuery,counterWeightLookupQuery} from './retail_lookup_query.js';
+import {namedPackLookupQuery,counterWeightLookupQuery,mergeProductRefinement} from './retail_lookup_query.js';
+test('a full named refinement does not duplicate the pending product query',()=>{
+ assert.equal(mergeProductRefinement('Guinness Draught','Guinness Draught 8 pack 500ml not Nitrosurge'),'Guinness Draught 8 pack 500ml not Nitrosurge');
+ assert.equal(mergeProductRefinement('Guinness Draught offers','Guinness Draught eight pack 500 ml cans not Nitrosurge offers'),'Guinness Draught eight pack 500 ml cans not Nitrosurge offers');
+ assert.equal(mergeProductRefinement('Guinness Draught','8 pack 500ml'),'Guinness Draught 8 pack 500ml');
+});
 test('counter portions do not become a conflicting retail pack size',()=>{assert.equal(counterWeightLookupQuery('loose skin-on salmon darnes 200 grams'),'loose skin-on salmon darnes');});
 test('exact packs are looked up before interpreting mix eligibility',()=>{
  assert.equal(namedPackLookupQuery('sealed smoked salmon packets'),'smoked salmon');

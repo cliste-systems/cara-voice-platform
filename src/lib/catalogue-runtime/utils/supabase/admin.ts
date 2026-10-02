@@ -2,6 +2,7 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {createClient} from '@supabase/supabase-js';
 import WebSocket from 'ws';
+import {catalogueFetch} from '../../../catalogue_http_transport.js';
 export const catalogueReadSignal = new AsyncLocalStorage<AbortSignal>();
 export function createAdminClient() {
   const url=process.env.SUPABASE_URL?.trim();
@@ -23,6 +24,6 @@ export function createAdminClient() {
     // one-second best-effort read hold the entire offer reply for eight seconds.
     const querySignal=init?.signal??(input instanceof Request?input.signal:undefined);
     const signals=[deadline,...(querySignal?[querySignal]:[]),...(signal&&!publicRefresh?[signal]:[])];
-    return fetch(input,{...init,headers,signal:AbortSignal.any(signals)});
+    return catalogueFetch(input,{...init,headers,signal:AbortSignal.any(signals)});
   }}});
 }

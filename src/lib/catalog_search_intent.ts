@@ -112,7 +112,7 @@ export function trackCallerCatalogSearchIntent(
   const t = text.toLowerCase();
   if (/\b(?:forget|new question|instead|actually)\b/i.test(text)) {
     Object.assign(flags, {pendingProductSearchState: undefined, pendingProductLookupQuery: undefined,
-      pendingProductFulfilmentClarification: false, pendingProductRefinementClarification: false,
+      pendingProductFulfilmentClarification: false, pendingProductRefinementClarification: false, pendingAlcoholVariantQuestion: null,
       callerWantsLowestPrice: false, callerLowestPriceOffersOnly: false, callerBarbecueCooking: false, callerMeatPreference: false});
   }
   if (/\b(?:vegetarian|vegan|meat[- ]free|plant[- ]based)\b/i.test(text)) flags.callerMeatPreference = false;

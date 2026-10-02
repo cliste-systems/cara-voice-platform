@@ -9,3 +9,9 @@ export function spokenVerifiedExpiry(value:string):string|null {
 export function callerRequestsOfferDates(query:string):boolean {
  return /\b(?:expir(?:e|es|y|ing|ation)|end(?:s|ing)?|until|valid(?:ity)?|last(?:s|ing)?|when|Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)\b/i.test(query);
 }
+export function historicalOfferGuidance(query:string,reference=new Date()):string|null {
+ const year=Number(new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Dublin',year:'numeric'}).format(reference));
+ const historicalYear=[...query.matchAll(/\b(20\d{2})\b/g)].some(m=>Number(m[1])<year);
+ if(!historicalYear||! /\b(?:Christmas|Easter|last year|last week|January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(query))return null;
+ return 'Only current catalogue evidence is available. The historical promotion terms and expiry are not verified. Say you cannot confirm that those old offers can be used today; do not assert they expired, remain valid, or were checked in an archive. Do not substitute a current product offer for historical promotion evidence.';
+}

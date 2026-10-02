@@ -1,7 +1,7 @@
-import {requestedPackTotalQuote,requestedCounterWeightQuote} from './retail_quantity_quote.js';
-import {namedPackLookupQuery,counterWeightLookupQuery} from './retail_lookup_query.js';
-import {guardOfferEvidence,spokenOfferMatches} from './retail_offer_evidence.js';
-import {callerRequestsOfferDates,spokenVerifiedExpiry} from './retail_offer_expiry.js';
+import {requestedPackTotalQuote,requestedCounterWeightQuote,verifiedSavingsQuote} from './retail_quantity_quote.js';
+import {namedPackLookupQuery,counterWeightLookupQuery,mergeProductRefinement} from './retail_lookup_query.js';
+import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor} from './retail_offer_evidence.js';
+import {callerRequestsOfferDates,spokenVerifiedExpiry,historicalOfferGuidance} from './retail_offer_expiry.js';
 import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
 import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
 import { llm, voice } from '@livekit/agents';
@@ -134,6 +134,8 @@ export type CaraSessionFlags = {
   pendingProductLookupQuery?: string | null;
   /** Tool asked the caller to narrow a broad category by brand/type. */
   pendingProductRefinementClarification?: boolean;
+  /** An unresolved regular/alcohol-free choice survives pack-size refinements. */
+  pendingAlcoholVariantQuestion?: string | null;
   /** Structured product-search context retained only while a clarification is pending. */
   pendingProductSearchState?: {
     query: string;
@@ -876,6 +878,7 @@ export class CaraTools {
 
       ud.sessionFlags.pendingProductFulfilmentClarification = false;
       ud.sessionFlags.pendingProductRefinementClarification = false;
+      ud.sessionFlags.pendingAlcoholVariantQuestion = null;
       ud.sessionFlags.pendingProductLookupQuery = null;
       ud.sessionFlags.pendingProductSearchState = null;
 
@@ -974,8 +977,14 @@ export class CaraTools {
         : callerOnlyChoseFulfilment && pendingProductQuery
           ? pendingProductQuery
           : callerProvidedRefinement
-            ? `${pendingProductQuery} ${trimmed}`
+            ? mergeProductRefinement(pendingProductQuery,trimmed)
             : trimmed;
+      if (callerProvidedRefinement && ud.sessionFlags.pendingAlcoholVariantQuestion &&
+          !/\b(?:regular|normal|alcoholic|zero|non[- ]?alcoholic|alcohol[- ]free|no alcohol)\b|0[.,]0/i.test(trimmed)) {
+        ud.sessionFlags.pendingProductLookupQuery = baseLookupQuery;
+        ud.sessionFlags.pendingProductSearchState = {...pendingState, query: baseLookupQuery};
+        return finish({ok:true,clarification_required:true,message:`The pack size is now known, but the previously verified regular and alcohol-free versions are still unresolved. Ask: ${ud.sessionFlags.pendingAlcoholVariantQuestion} Do not report a missing offer or choose a version.`,matches:[]});
+      }
       const wantsLowestPrice = callerRequestsLowestPrice(trimmed) || ud.sessionFlags.callerWantsLowestPrice === true;
       const lowestPriceOffersOnly = ud.sessionFlags.callerWantsLowestPrice === true
         ? ud.sessionFlags.callerLowestPriceOffersOnly === true
@@ -1039,6 +1048,8 @@ export class CaraTools {
       if (resolvedIntent === 'offer') {
         ud.sessionFlags.callerAskedAboutOffers = true;
       }
+      const historicalGuidance=historicalOfferGuidance(`${originalCallerQuery} ${lookupQuery}`);
+      if(historicalGuidance)return finish({ok:true,message:historicalGuidance,matches:[]});
 
       const callerNappiesQuery = /\b(?:napp(?:y|ies)|diapers?)\b/i.test(originalCallerQuery)
         ? originalCallerQuery : lookupQuery;
@@ -1236,9 +1247,19 @@ export class CaraTools {
 
       ud.sessionFlags.pendingProductFulfilmentClarification = false;
       ud.sessionFlags.pendingProductRefinementClarification = false;
+      ud.sessionFlags.pendingAlcoholVariantQuestion = null;
       ud.sessionFlags.pendingProductLookupQuery = null;
       ud.sessionFlags.pendingProductSearchState = null;
 
+      result.matches=result.matches.filter(match=>matchesRequestedDietLabel(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedWineColor(`${originalCallerQuery} ${lookupQuery}`,match));
+      const variantQuestion=callerInvitesExamples(originalCallerQuery)?null:alcoholVariantQuestion(lookupQuery,result.matches);
+      if(variantQuestion){
+        ud.sessionFlags.pendingAlcoholVariantQuestion=variantQuestion;
+        ud.sessionFlags.pendingProductRefinementClarification=true;
+        ud.sessionFlags.pendingProductLookupQuery=lookupQuery;
+        ud.sessionFlags.pendingProductSearchState={query:lookupQuery,...(resolvedIntent?{intent:resolvedIntent}:{}),...(effectiveServiceArea?{serviceArea:effectiveServiceArea}:{}),...(effectiveFulfilment?{fulfilment:effectiveFulfilment}:{})};
+        return finish({ok:true,clarification_required:true,message:`${CARA_CLARIFICATION_POLICY} Both regular and alcohol-free versions match the named brand. Ask: ${variantQuestion} Do not choose a version or quote a price yet.`,matches:[]});
+      }
       if (result.matches.length === 0) {
         const staleOffers = result.offersFreshness?.trim();
         return finish({
@@ -1261,6 +1282,7 @@ export class CaraTools {
         .map((match) => [match.quote_text.trim(),
           requestedPackTotalQuote(originalCallerQuery,match),
           requestedCounterWeightQuote(originalCallerQuery,match),
+          verifiedSavingsQuote(match),
           match.current_price_eur === null ? 'The requested quantity has no verified standalone total. Answer that you cannot confirm its total. Never prorate a bundle, even conditionally, or propose an illustrative total below the bundle minimum.' : '',
           match.is_on_offer === true && match.was_price_eur === null
             ? 'No usual/was price is supplied for this item. The single price is a current listed price, not a historical usual price. A bundle saving may only be compared with buying the same quantity at that listed single price.' : '',
@@ -1275,7 +1297,11 @@ export class CaraTools {
         ].filter(Boolean).join(' '))
         .join('\n\n');
 
+      const temporalGuidance=/\bold (?:deal|offer|promotion)\b|\bremember(?:ing)?\b/i.test(originalCallerQuery)
+        ? 'A verified current national offer remains current even when local assortment is unconfirmed. Do not speculate that it is an old local deal. If this exact product has no verified current promotion, say that you cannot verify the remembered historical offer; do not suggest it may be old. ' : '';
       const hasAlcohol = result.matches.some((match) => match.is_alcohol === true);
+      const mixingGuidance=/\bmix(?:ing)?\b/i.test(originalCallerQuery)&&result.matches.some(match=>match.mix_match_verified!==true)
+        ? 'Answer the mixing question as unconfirmed; do not start with yes or imply eligibility. You may then explain the verified same-product multibuy. A listed bundle does not prove that different products can be combined. ' : '';
       let alcoholNote = '';
       if (hasAlcohol && !ud.sessionFlags.alcoholAgeDisclaimerGiven) {
         ud.sessionFlags.alcoholAgeDisclaimerGiven = true;
@@ -1294,7 +1320,7 @@ export class CaraTools {
       return finish({
         ok: true,
         ...(result.recoveryUsed ? {lookup_recovered:true} : {}),
-        message: `${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${!callerRequestsOfferDates(originalCallerQuery)?' The caller did not ask for an expiry date; do not volunteer dates or weekdays.':''}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        message: `${temporalGuidance}${mixingGuidance}${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${!callerRequestsOfferDates(originalCallerQuery)?' The caller did not ask for an expiry date; do not volunteer dates or weekdays.':''}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
       });
     },

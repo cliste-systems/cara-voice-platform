@@ -1,5 +1,11 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {requestedPackTotalQuote,requestedCounterWeightQuote} from './retail_quantity_quote.js';
+import {requestedPackTotalQuote,requestedCounterWeightQuote,verifiedSavingsQuote} from './retail_quantity_quote.js';
+test('bundle and reference savings use exact cents rather than rounded euros',()=>{
+ const m={product_name:'Smoked Salmon',department:'Fish',sku:'1',score:1,quote_text:'Two for eight',current_price_eur:4.99,was_price_eur:null,discount_label:'2 for €8',fulfilment:'prepack'};
+ assert.match(verifiedSavingsQuote(m),/one euro ninety eight/);
+ assert.match(verifiedSavingsQuote({...m,current_price_eur:4,was_price_eur:5.29,discount_label:null}),/one euro twenty nine per item/);
+ assert.doesNotMatch(verifiedSavingsQuote({...m,current_price_eur:null}),/one euro ninety eight/);
+});
 test('loose counter portions use the verified kilo price rather than pack matching',()=>{
  const m={product_name:'Salmon',department:'Fish',sku:'1',score:1,quote_text:'twenty two euro forty nine per kilo',current_price_eur:22.49,fulfilment:'counter',price_basis:'per_kilo'};
  for(const q of ['two hundred grams','200 g','0.2 kg'])assert.match(requestedCounterWeightQuote(q,m),/four euro fifty/);
@@ -13,7 +19,7 @@ test('two four-euro grape packs do not cost the three-for-ten bundle total',()=>
 });
 test('unknown bundle terms, counter weights and conflicting pack eligibility cannot produce a guaranteed total',()=>{
  const match={product_name:'Wraps',department:'Bakery',sku:'1',score:1,quote_text:'Listed single price',current_price_eur:1.5,discount_label:'Permanent multi-buy Minimum quantity: 2',fulfilment:'prepack'};
- assert.equal(requestedPackTotalQuote('buy two wraps',match),'');
+ assert.match(requestedPackTotalQuote('buy two wraps',match),/three euro before any unverified multibuy discount/);
  assert.equal(requestedPackTotalQuote('buy two wraps',{...match,discount_label:null,fulfilment:'counter'}),'');
  assert.equal(requestedPackTotalQuote('buy two wraps',{...match,discount_label:'2 for €2',quote_text:'The pack eligibility is not verified.'}),'');
 });

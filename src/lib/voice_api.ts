@@ -1,4 +1,5 @@
 import {readCatalogueDirect,directCatalogueRecoveryConfigured} from './catalogue_direct_recovery.js';
+import {catalogueFetch} from './catalogue_http_transport.js';
 import {preferReliableDnsOrder} from './network_connectivity.js';
 import { hedgedCatalogueRead } from './catalogue_recovery.js';
 import { redactPii } from './gdpr.js';
@@ -142,7 +143,8 @@ async function postVoiceWebhook<T>(
   parentSignal?.addEventListener('abort',cancel,{once:true});
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${base}${path}`, {
+    const fetchRead=path==='/api/voice/search-supervalu-products'?catalogueFetch:fetch;
+    const res = await fetchRead(`${base}${path}`, {
       method: 'POST',
       headers: {...authHeaders(), ...(path === '/api/voice/search-supervalu-products' ? {Connection:'close'} : {})},
       body: JSON.stringify(payload),
@@ -413,6 +415,7 @@ export type SearchSupervaluProductsMatch = {
   score: number;
   quote_text: string;
   price_basis?: string;
+  mix_match_verified?: boolean | null;
   offer_week_start?: string | null;
   offer_week_end?: string | null;
   discount_label?: string | null;
