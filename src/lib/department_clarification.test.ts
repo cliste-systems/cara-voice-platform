@@ -21,14 +21,14 @@ it('clarifies the complete public department navigation in customer requests',()
 
 it('broadens only after a completed search in the same department',()=>{
  const history=['Any offers in deli?','Sliced ham at the counter','Any offers at all in deli?'];
- const previous={callerQuery:history[1]!,department:departmentScope(history[0]!)};
+ const previous={callerQuery:history[1]!,department:departmentScope(history[0]!)!};
  assert.equal(callerBroadensOfferSearch(history[2]!,history,previous),true);
  assert.equal(callerBroadensOfferSearch(history[2]!,history),false);
  assert.equal(callerBroadensOfferSearch('Any offers at all in alcohol?',history,previous),false);
  assert.equal(callerBroadensOfferSearch('Any general offers?',history,previous),true);
  assert.ok(departmentClarification('Any offers at all in deli?'));
  for(const name of ['deli','meat','fish','bakery','dairy','produce','frozen','household','baby','pets','health','beauty','cheese','chilled','grocery','drinks','wine','newsagent']) {
-  const last={callerQuery:`a specific product in ${name}`,department:departmentScope(name)};
+  const last={callerQuery:`a specific product in ${name}`,department:departmentScope(name)!};
   assert.equal(callerBroadensOfferSearch(`Any offers at all in ${name}?`,[],last),true,name);
  }
 });
