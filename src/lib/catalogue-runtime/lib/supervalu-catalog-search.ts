@@ -22,6 +22,7 @@ import {
   inferRewardsPricePointFromQuery,
   inferWeeklyOffersListIntent,
   offerSearchProductIdentityTokens,
+  stripRetailCounterLocation,
   resolveWeeklyOfferSearchFilters,
   searchSyncedWeeklyOffersByQuery,
   RETAIL_WEEKLY_OFFERS_LIST_MAX_RESULTS,
@@ -199,7 +200,7 @@ export function stripCatalogSearchBoilerplate(query: string): string {
 
 /** Strip packaging / aisle phrasing callers use — not product names on the gateway. */
 export function stripCatalogPackagingNoise(query: string): string {
-  return query
+  return stripRetailCounterLocation(query)
     .replace(
       /\b(packets?|packs?|pre\s*-?\s*pack(?:ed|s)?|packaged|sealed|chilled|aisle|tray|fridge|shelf|counter|loose|fresh sliced)\b/gi,
       " ",

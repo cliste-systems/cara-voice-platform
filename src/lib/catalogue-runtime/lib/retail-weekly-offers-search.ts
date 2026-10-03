@@ -762,10 +762,15 @@ const FULFILMENT_QUERY_TOKENS = new Set([
   "backstore",
 ]);
 
+/** Location phrases constrain fulfilment; they are not product-name words. */
+export function stripRetailCounterLocation(query: string): string {
+  return query.replace(/\b(?:butchers?|meat|deli|fish|seafood|bakery|cheese)\s+(?:counter|department|section|aisle)\b/gi, " ");
+}
+
 /** Keep nouns that identify products (fish fingers, wine gums, frozen pizza). */
 export function offerSearchProductIdentityTokens(query: string): string[] {
   const structural = new Set(["counter", "prepack", "prepacked", "packaged", "aisle", "section", "department", "departments", "wall", "back", "off", "licence", "license", "shop", "store", "per", "kilo", "kg", "weight", "loose"]);
-  return tokenizeSupervaluSearchQuery(query).filter((token) => !structural.has(token));
+  return tokenizeSupervaluSearchQuery(stripRetailCounterLocation(query)).filter((token) => !structural.has(token));
 }
 
 export function offerSearchProductTokens(query: string): string[] {
