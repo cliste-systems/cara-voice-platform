@@ -27,7 +27,7 @@ export function alcoholVariantQuestion(query:string,matches:SearchSupervaluProdu
 export function matchesRequestedDietLabel(query:string,match:SearchSupervaluProductsMatch):boolean {
  query=positiveRetailQuery(query);
  const evidence=`${match.product_name} ${match.department}`;
- if(/\bvegan\b/i.test(query)&&! /\b(?:not|no|without)\s+vegan\b/i.test(query)&&! /\bvegan\b|plant[- ]based|meat[- ]free/i.test(evidence))return false;
+ if(/\bvegan\b/i.test(query)&&! /\b(?:not|no|without)\s+vegan\b/i.test(query)&&! /\bvegan\b/i.test(evidence))return false;
  if(/gluten[- ]free/i.test(query)&&! /gluten[- ]free/i.test(evidence))return false;
  if(/dairy[- ]free/i.test(query)&&! /dairy[- ]free/i.test(evidence))return false;
  return true;

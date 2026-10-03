@@ -41,7 +41,7 @@ export function matchesRetailProductVariants(query:string,name:string,category='
  if(size&&(!/\b(?:napp(?:y|ies)|diapers?|pull ups?)\b/.test(evidence)||!new RegExp(`\\bsize\\s*${size[1]}\\b`).test(evidence)))return false;
  // These labels are evidence requirements, never allergy or certification guarantees.
  for(const label of [/\bgluten free\b/,/\bdairy free\b/,/\bvegan\b/]) {
-  if(label.test(positive)&&!label.test(evidence)&&!(label.source==='\\bvegan\\b'&&/\bplant based\b/.test(evidence)))return false;
+  if(label.test(positive)&&!label.test(evidence))return false;
  }
  return true;
 }

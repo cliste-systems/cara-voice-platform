@@ -22,6 +22,7 @@ test('a named beer pack must distinguish regular and alcohol-free versions',()=>
 test('dietary lookups cannot return ordinary meat or infer dietary suitability from a brand',()=>{
  const base={department:'Frozen',sku:'1',score:1,quote_text:'Listed',product_name:'Irish Beef Burgers'};
  assert.equal(matchesRequestedDietLabel('vegan frozen burgers',base),false);
+ assert.equal(matchesRequestedDietLabel('vegan burgers',{...base,product_name:'Meat Free Plant Based Burgers'}),false);
  assert.equal(matchesRequestedDietLabel('vegan frozen burgers',{...base,product_name:'Vegan Frozen Burgers'}),true);
  assert.equal(matchesRequestedDietLabel('gluten-free bread',{...base,department:'Gluten Free Bread',product_name:'Genius Bread'}),true);
  assert.equal(matchesRequestedDietLabel('dairy-free ice cream',{...base,product_name:'Standard Ice Cream'}),false);
