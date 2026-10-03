@@ -174,6 +174,21 @@ describe('buildCaraCallPrompt', () => {
     assert.doesNotMatch(prompt, /Hello Cara demo line/i);
   });
 
+  it('changes only speaking style when natural demo conversation is enabled', () => {
+    const input = { ...baseInput, conversationalRetailMode: true, openingGreetingDelivered: true };
+    const original = buildCaraCallPrompt(input);
+    const natural = buildCaraCallPrompt({ ...input, naturalConversationStyle: true });
+    const withoutStyle = (prompt: string) => prompt.replace(
+      /### (?:How real people talk|Natural conversation)[\s\S]*?(?=### When you didn't catch it)/,
+      '',
+    );
+    // Everything outside tone must stay identical, including price evidence,
+    // uncertain speech, disclosure, intake, confirmation and call-ending rules.
+    assert.equal(withoutStyle(natural), withoutStyle(original));
+    assert.match(natural, /do not introduce stories, invented experiences or unrelated topics/);
+    assert.doesNotMatch(natural, /Often 8–15 words/);
+  });
+
   it('includes universal ending-calls state machine on conversational retail 9508', () => {
     const prompt = buildCaraCallPrompt({
       ...baseInput,
@@ -344,7 +359,7 @@ describe('offer browsing instructions', () => {
     assert.match(prompt, /multibuys/);
     assert.match(prompt, /3 for 10/);
     assert.match(prompt, /Which department were you thinking of/);
-    assert.match(prompt, /For EVERY broad department/);
+    assert.match(prompt, /For an initial broad department request/);
     assert.doesNotMatch(prompt, /search both counter and pre-pack immediately/);
     assert.match(prompt, /national catalogue match does not by itself confirm local stock/i);
     assert.doesNotMatch(prompt, /never generic "weekly offers"/);

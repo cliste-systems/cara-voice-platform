@@ -60,7 +60,7 @@ describe('CaraTools current-offer lookup', () => {
           userData: {
             organizationId: 'test-org',
             calledNumber: 'test-line',
-            sessionFlags: {callerCatalogQuery: scope.callerQuery},
+            sessionFlags: {callerCatalogQuery: scope.callerQuery,callerCatalogHistory:[scope.callerQuery??query]},
           },
           session: { currentAgent: {} },
         },
@@ -85,6 +85,33 @@ describe('CaraTools current-offer lookup', () => {
     }
   }
 
+  it('searches the whole deli after counter ham without retaining a stale ham query',async()=>{
+    const {requests,result}=await lookup('deli counter sliced ham offer',{ok:true,matches:[]},[],
+      'deli counter sliced ham offer',{callerQuery:'Any offers on sliced ham at the deli counter?',followUpCallerQuery:'Is there any offers at all this week in the deli?'});
+    assert.ok(requests.length>=2);
+    const last=requests.at(-1)!;
+    assert.doesNotMatch(String(last.query),/ham/i);
+    assert.equal(last.service_area,'deli');
+    assert.equal(last.fulfilment,undefined);
+    assert.doesNotMatch(result.message,/Ask one short question|what kind of product/i);
+  });
+  it('retains counter scope when explicitly repeated in the broader follow-up',async()=>{
+    const {requests}=await lookup('deli counter sliced ham offer',{ok:true,matches:[]},[],
+      'deli offers',{callerQuery:'Sliced ham offers at the deli counter?',followUpCallerQuery:'Any offers at all at the deli counter?'});
+    assert.equal(requests.at(-1)?.fulfilment,'counter');
+    assert.doesNotMatch(String(requests.at(-1)?.query),/ham/i);
+  });
+  it('does not accept a model-chosen product for a broad deli lunch question',async()=>{
+    const {requests,result}=await lookup('Brady Family Glazed Ham offers',{ok:true,matches:[]},[],undefined,{callerQuery:'Any deli offers for lunch?'});
+    assert.equal(requests.length,0);
+    assert.match(result.message,/Ask one short question/);
+  });
+  it('does not answer next Thursday with current ham promotions',async()=>{
+    const {requests,result}=await lookup('sliced ham offer',{ok:true,matches:[]},[],undefined,{callerQuery:'What deal is there next Thursday on sliced ham?'});
+    assert.equal(requests.length,0);
+    assert.match(result.message,/future promotions/);
+    assert.match(result.message,/Do not substitute today/);
+  });
   it('does not infer card eligibility when the caller asks what qualifies', async () => {
     const {result}=await lookup('Tampax Compak Regular Applicator Tampons 18 Piece offer', {ok:true,matches:[{product_name:'Tampax Compak Regular Applicator Tampons (18 Piece)',department:'Beauty & Personal Care',sku:'tampons',score:1,current_price_eur:4.99,discount_label:'2 for €8 Always/Tampax 14pce-68pce',quote_text:'Two for eight euro.'}]},[],undefined,{callerQuery:'If I get two Tampax Compak Regular Applicator Tampons 18 Piece, anything I need to qualify?'});
     assert.match(result.message,/Card eligibility is unknown/);

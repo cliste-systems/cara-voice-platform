@@ -52,3 +52,18 @@ export function guardOfferEvidence(match:SearchSupervaluProductsMatch):SearchSup
  const price=match.current_price_eur;
  return {...match,is_on_offer:false,discount_label:null,quote_text:`${match.product_name}. ${price!=null?`Verified current listed single price ${formatSpokenEurAmount(price)}.`:'No verified single price is supplied.'} The source promotion names a different product or pack. Eligibility for this exact product is not verified. Do not quote the conflicting bundle as an offer for this item or speculate about its history. This is a national listing; local assortment and stock are not confirmed.`};
 }
+
+/** Deli preparation/flavour qualifiers identify different products, not optional filler. */
+export function matchesRequestedDeliVariant(query:string,match:SearchSupervaluProductsMatch):boolean {
+ const normalize=(text:string)=>text.toLowerCase().replace(/[-’']/g,' ').replace(/\bhoney roasted\b/g,'honey roast').replace(/\bwoodsmoked\b/g,'wood smoked').replace(/\s+/g,' ');
+ const requested=normalize(query),product=normalize(match.product_name);
+ if(!/\b(?:ham|chicken|turkey|salami|chorizo|fuet|pancetta|prosciutto|beef|pastrami)\b/.test(requested)||
+    !(match.service_area==='deli'||/sliced cooked meats|\bham\b|continental meats/i.test(match.department)))return true;
+ for(const qualifier of ['traditional','wood smoked','honey roast','wafer thin','crumbed','carved','shredded','tikka']) {
+  const requestedQualifier=new RegExp(`\\b${qualifier}\\b`).test(requested);
+  const excluded=new RegExp(`\\b(?:not|no|without)\\s+${qualifier}\\b`).test(requested);
+  const productQualifier=new RegExp(`\\b${qualifier}\\b`).test(product);
+  if(requestedQualifier&&(excluded?productQualifier:!productQualifier))return false;
+ }
+ return true;
+}

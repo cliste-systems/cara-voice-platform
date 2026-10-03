@@ -1,8 +1,8 @@
 import {requestedPackTotalQuote,requestedCounterWeightQuote,verifiedSavingsQuote} from './retail_quantity_quote.js';
 import {namedPackLookupQuery,counterWeightLookupQuery,mergeProductRefinement} from './retail_lookup_query.js';
-import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence} from './retail_offer_evidence.js';
-import {callerRequestsOfferDates,spokenVerifiedExpiry,historicalOfferGuidance,ambiguousHistoricalOfferGuidance} from './retail_offer_expiry.js';
-import { departmentClarification,callerInvitesExamples } from './department_clarification.js';
+import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence,matchesRequestedDeliVariant} from './retail_offer_evidence.js';
+import {callerRequestsOfferDates,spokenVerifiedExpiry,historicalOfferGuidance,ambiguousHistoricalOfferGuidance,futureOfferGuidance} from './retail_offer_expiry.js';
+import { departmentClarification,callerInvitesExamples,callerBroadensOfferSearch,departmentScope,departmentName } from './department_clarification.js';
 import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
 import { llm, voice } from '@livekit/agents';
 import { z } from 'zod';
@@ -74,6 +74,7 @@ const SMS_FAILURE_MESSAGE =
   'SMS failed — tell the caller you could not text the link and offer to take a message. Do not read the URL.';
 
 export type CaraSessionFlags = {
+  lastCompletedProductLookup?: {callerQuery:string; department?:number};
   linkSent: boolean;
   actionTicketCreated: boolean;
   callbackRequested: boolean;
@@ -908,7 +909,7 @@ export class CaraTools {
 
   readonly searchSuperValuProducts = llm.tool({
     description:
-      'MANDATORY for every product stock/range, price, or offer claim unless approved store knowledge explicitly answers it. Look up SuperValu products — stock, regular price, and synced weekly offers. Never decide from common sense that a supermarket does or does not sell something: search first, even for unusual requests such as laptops. Rewards/Real Rewards price-point browsing is supported: for questions like "what Rewards offers are €2.50?" call this tool with intent "offer" and preserve both Rewards and the exact amount in query; NEVER say you cannot search offers by price. Pass the caller\'s product words, department browse, or exact offer filter. Generic "weekly offers", "meat offers", "Super 7", "multibuys", and "3 for 10" are supported; preserve campaign and bundle wording. Clarify an unscoped offer request by department first. For EVERY broad department, first establish what kind of product the caller wants. Naming alcohol, bakery, dairy, household, baby or any other department is not a product preference. Counter versus pre-packed alone does not resolve product type. Preserve the caller\'s chosen type in query, not just the department. If they explicitly request examples, preserve that wording in query. Search all requested departments; do not force household, frozen, baby, pet or health/beauty into grocery. When the caller names a department/area, pass service_area immediately; when they name counter vs pre-pack, pass fulfilment immediately. Explicit service_area and fulfilment are hard scope and must not be silently widened. Let the tool request clarification if a specific product needs it. An explicit named campaign can be searched directly; ask a scope question only when it materially affects the answer. Quote only current tool results, including bundle quantities, Rewards membership conditions and validity dates when given. National range does not guarantee local stock.',
+      'MANDATORY for every product stock/range, price, or offer claim unless approved store knowledge explicitly answers it. Look up SuperValu products — stock, regular price, and synced weekly offers. Never decide from common sense that a supermarket does or does not sell something: search first, even for unusual requests such as laptops. Rewards/Real Rewards price-point browsing is supported: for questions like "what Rewards offers are €2.50?" call this tool with intent "offer" and preserve both Rewards and the exact amount in query; NEVER say you cannot search offers by price. Pass the caller\'s product words, department browse, or exact offer filter. Generic "weekly offers", "meat offers", "Super 7", "multibuys", and "3 for 10" are supported; preserve campaign and bundle wording. Clarify an unscoped offer request by department first. For an initial broad department request, establish what kind of product the caller wants. After a specific lookup, if they ask for any offers at all or general offers in that same department, search the wider department immediately; do not ask permission or repeat the preference question. Naming alcohol, bakery, dairy, household, baby or any other department is not a product preference. Counter versus pre-packed alone does not resolve product type. Preserve the caller\'s chosen type in query, not just the department. If they explicitly request examples, preserve that wording in query. Search all requested departments; do not force household, frozen, baby, pet or health/beauty into grocery. When the caller names a department/area, pass service_area immediately; when they name counter vs pre-pack, pass fulfilment immediately. Explicit service_area and fulfilment are hard scope and must not be silently widened. Let the tool request clarification if a specific product needs it. An explicit named campaign can be searched directly; ask a scope question only when it materially affects the answer. Quote only current tool results, including bundle quantities, Rewards membership conditions and validity dates when given. National range does not guarantee local stock.',
     parameters: z.object({
       query: z
         .string()
@@ -938,8 +939,14 @@ export class CaraTools {
     }),
     execute: async ({ query, intent: explicitIntent, service_area: modelServiceArea, fulfilment }, { ctx }) => {
       const ud = readCaraUserData(ctx);
+      let attemptedLookup = false;
       const finish = <T>(payload: T): T => {
         const result = payload as { ok?: boolean; matches?: unknown[]; clarification_required?: boolean };
+        if (attemptedLookup && result.ok === true) {
+          const department=departmentScope(originalCallerQuery) ?? departmentScope(lookupQuery) ??
+            (ud.sessionFlags.callerCatalogHistory ?? []).slice(0,-1).reverse().map(departmentScope).find(value=>value!==undefined);
+          ud.sessionFlags.lastCompletedProductLookup={callerQuery:originalCallerQuery,...(department!==undefined?{department}:{})};
+        }
         ud.onProductLookupEvent?.({phase: 'complete', query: lookupQuery, intent: resolvedIntent, ok: result.ok === true, matchCount: result.matches?.length ?? 0, clarification: result.clarification_required === true || ud.sessionFlags.pendingProductFulfilmentClarification === true || ud.sessionFlags.pendingProductRefinementClarification === true});
         deliverGptLiveToolResult(ctx, payload);
         return payload;
@@ -967,6 +974,8 @@ export class CaraTools {
         (!pendingState?.serviceArea || !(inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) || (inferExplicitProductServiceArea(trimmed) ?? modelServiceArea) === pendingState.serviceArea) &&
         productQueryTokens(trimmed).length > 0;
       const originalCallerQuery = ud.sessionFlags.callerCatalogQuery ?? trimmed;
+      const broadensSearch=callerBroadensOfferSearch(originalCallerQuery,ud.sessionFlags.callerCatalogHistory??[],ud.sessionFlags.lastCompletedProductLookup);
+      const invitedExamples=callerInvitesExamples(originalCallerQuery)||broadensSearch;
       const callerNappySizeRefinement = pendingRefinementClarification && pendingProductQuery &&
         /\b(?:napp(?:y|ies)|diapers?)\b/i.test(pendingProductQuery) &&
         /^(?:size\s+(?:[0-9]+\+?|one|two|three|four|five|six|seven|eight|nine)(?:\s+plus)?|newborn|premature)[.!]?$/i.test(originalCallerQuery.trim());
@@ -1002,6 +1011,13 @@ export class CaraTools {
         : cookingQuery;
       let lookupQuery = wantsLowestPrice && !callerRequestsLowestPrice(comparisonQuery)
         ? `cheapest ${comparisonQuery}`.slice(0, 240) : namedPackLookupQuery(comparisonQuery);
+      if (broadensSearch) {
+        const department=departmentScope(originalCallerQuery)??ud.sessionFlags.lastCompletedProductLookup?.department;
+        // Natural broadening words ("anything else", "at all") are conversation
+        // context, not product terms. Keep the department and current promotion filter.
+        const promotion=originalCallerQuery.match(/\b(?:multibuys?|rewards|super\s*(?:7|seven)|\d+\s+for\s+[€£]?\s*\d+(?:[.,]\d+)?)\b/gi)?.join(' ')??'';
+        lookupQuery=`${departmentName(department)??''} offers ${promotion}`.trim();
+      }
       const callerAlcoholWords=(ud.sessionFlags.callerCatalogHistory??[originalCallerQuery]).join(' ');
       if (/\b(?:guinness|beer|lager|stout|cider)\b/i.test(lookupQuery) &&
           !/\b(?:regular|normal|alcoholic|zero|non[- ]?alcoholic|alcohol[- ]free|no alcohol)\b|0[.,]0/i.test(callerAlcoholWords)) {
@@ -1027,15 +1043,15 @@ export class CaraTools {
         (ud.sessionFlags.callerCatalogHistory ?? []).some(text => inferExplicitProductFulfilment(text) === fulfilment)
         ? fulfilment : undefined;
       const effectiveFulfilment: RetailProductFulfilment | undefined =
-        callerFulfilment ?? queryFulfilment ??
-        (wantsLowestPrice ? undefined : groundedModelFulfilment) ??
-        ((pendingFulfilmentClarification || callerProvidedRefinement)
+        callerFulfilment ?? (broadensSearch ? undefined : queryFulfilment) ??
+        (wantsLowestPrice || broadensSearch ? undefined : groundedModelFulfilment) ??
+        (!broadensSearch && (pendingFulfilmentClarification || callerProvidedRefinement)
           ? wantsLowestPrice ? inferExplicitProductFulfilment(pendingProductQuery ?? '') : pendingState?.fulfilment
           : undefined);
       const effectiveServiceArea: RetailProductServiceArea | undefined =
-        callerServiceArea ?? queryServiceArea ??
-        (wantsLowestPrice ? undefined : groundedModelServiceArea) ??
-        (pendingFulfilmentClarification || pendingRefinementClarification
+        callerServiceArea ?? (broadensSearch ? inferExplicitProductServiceArea(lookupQuery) : queryServiceArea) ??
+        (wantsLowestPrice || broadensSearch ? undefined : groundedModelServiceArea) ??
+        (!broadensSearch && (pendingFulfilmentClarification || pendingRefinementClarification)
           ? wantsLowestPrice ? inferExplicitProductServiceArea(pendingProductQuery ?? '') : pendingState?.serviceArea
           : undefined);
 
@@ -1054,7 +1070,7 @@ export class CaraTools {
       if (resolvedIntent === 'offer') {
         ud.sessionFlags.callerAskedAboutOffers = true;
       }
-      const historicalGuidance=ambiguousHistoricalOfferGuidance(originalCallerQuery)??historicalOfferGuidance(`${originalCallerQuery} ${lookupQuery}`);
+      const historicalGuidance=futureOfferGuidance(originalCallerQuery)??ambiguousHistoricalOfferGuidance(originalCallerQuery)??historicalOfferGuidance(`${originalCallerQuery} ${lookupQuery}`);
       if(historicalGuidance)return finish({ok:true,message:historicalGuidance,matches:[]});
 
       const callerNappiesQuery = /\b(?:napp(?:y|ies)|diapers?)\b/i.test(originalCallerQuery)
@@ -1063,7 +1079,7 @@ export class CaraTools {
         !/\b(?:rash|cream|bags?|sacks?|bins?|disposal)\b/i.test(callerNappiesQuery) &&
         !/\b(?:size\s*(?:[0-9]+|one|two|three|four|five|six|seven|eight|nine)|newborn|premature)\b/i.test(callerNappiesQuery) &&
         !/\b(?:examples?|any size|all sizes|rundown)\b/i.test(originalCallerQuery);
-      const broadQuestion = missingNappySize ? 'What size nappies do you need?' : callerInvitesExamples(originalCallerQuery) ? null : departmentClarification(lookupQuery);
+      const broadQuestion = missingNappySize ? 'What size nappies do you need?' : invitedExamples ? null : ((!pendingFulfilmentClarification && !callerProvidedRefinement ? departmentClarification(originalCallerQuery) : null) ?? departmentClarification(lookupQuery));
       if (broadQuestion && rewardsPricePoint == null) {
         ud.sessionFlags.pendingProductRefinementClarification = true;
         ud.sessionFlags.pendingProductFulfilmentClarification = false;
@@ -1082,6 +1098,7 @@ export class CaraTools {
         ...(effectiveFulfilment ? { fulfilment: effectiveFulfilment } : {}),
       };
 
+      attemptedLookup=true;
       ud.onProductLookupEvent?.({phase: 'start', query: lookupQuery, intent: resolvedIntent});
       let result: Awaited<ReturnType<typeof postSearchSupervaluProducts>>;
       if (rewardsPricePoint != null) {
@@ -1257,8 +1274,8 @@ export class CaraTools {
       ud.sessionFlags.pendingProductLookupQuery = null;
       ud.sessionFlags.pendingProductSearchState = null;
 
-      result.matches=result.matches.filter(match=>matchesRequestedDietLabel(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedWineColor(`${originalCallerQuery} ${lookupQuery}`,match));
-      const variantQuestion=callerInvitesExamples(originalCallerQuery)?null:alcoholVariantQuestion(lookupQuery,result.matches);
+      result.matches=result.matches.filter(match=>matchesRequestedDietLabel(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedWineColor(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedDeliVariant(originalCallerQuery,match));
+      const variantQuestion=invitedExamples?null:alcoholVariantQuestion(lookupQuery,result.matches);
       if(variantQuestion){
         ud.sessionFlags.pendingAlcoholVariantQuestion=variantQuestion;
         ud.sessionFlags.pendingProductRefinementClarification=true;
@@ -1270,7 +1287,7 @@ export class CaraTools {
         const staleOffers = result.offersFreshness?.trim();
         return finish({
           ok: true,
-          message: (callerInvitesExamples(originalCallerQuery) ? 'The caller explicitly invited examples. Do not ask them to choose a department or product type. If these requested conditions cannot be verified, say that briefly; never invent qualifying offers. ' : CARA_CLARIFICATION_POLICY) + '\n\n' + (staleOffers
+          message: (invitedExamples ? 'The caller explicitly asked for the broader department search or invited examples. Do not ask them to choose a department or product type. If these requested conditions cannot be verified, say that briefly; never invent qualifying offers. ' : CARA_CLARIFICATION_POLICY) + '\n\n' + (staleOffers
             ? `${staleOffers} ${result.noMatchQuote ?? 'No matching current result was returned for this request.'} Explain only the freshness limitation reported above. Do not infer that every department is missing, that the product is not sold, or that no offer exists. Offer a team check if the caller wants confirmation.`
             : (result.noMatchQuote ??
               'No matching product found in the catalogue. Do not claim the store does not stock it and do not guess. Say you cannot confirm that product from the catalogue you checked and offer to get a team member to ring back to confirm availability. If the caller wants that, collect the product description and their first name for the post-call callback.')),
@@ -1335,7 +1352,7 @@ export class CaraTools {
       return finish({
         ok: true,
         ...(result.recoveryUsed ? {lookup_recovered:true} : {}),
-        message: `${rangeOnly?'The caller asked about the national range only. Answer whether the exact product is listed and preserve the local availability caveat. Do not volunteer a price or deal. ':''}${temporalGuidance}${mixingGuidance}${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability.${!callerRequestsOfferDates(originalCallerQuery)?' The caller did not ask for an expiry date; do not volunteer dates or weekdays.':''}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
+        message: `${rangeOnly?'The caller asked about the national range only. Answer whether the exact product is listed and preserve the local availability caveat. Do not volunteer a price or deal. ':''}${temporalGuidance}${mixingGuidance}${comparisonGuidance}${freshnessNote}${offerPrefix} On the first price answer, briefly identify the price as listed nationally whenever the quote says local assortment is unconfirmed; do not omit its source or imply local availability. For a verified national price or range answer, answer and stop; offer a callback only when the caller needs local availability confirmed, not automatically after every answer.${!callerRequestsOfferDates(originalCallerQuery)?' The caller did not ask for an expiry date; do not volunteer dates or weekdays.':''}${alcoholNote ? ' Include the one-time age reminder once in your reply.' : ''}\n\n${formatted}${alcoholNote}`,
         matches: result.matches,
       });
     },

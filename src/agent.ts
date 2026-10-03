@@ -1,5 +1,6 @@
 import { createCallTranscriptJournal } from './lib/call_transcript_journal.js';
 import 'dotenv/config';
+import { resolveLegacyAdminDemoStack } from './lib/admin_demo_stack.js';
 import { ElevenLabsDemoTts, useElevenLabsDemo, ELEVEN_DEMO_MODEL, ELEVEN_DEMO_VOICE } from './lib/elevenlabs_demo_tts.js';
 
 import * as lkTurn from '@livekit/agents-plugin-livekit';
@@ -596,17 +597,21 @@ export default defineAgent({
       (isConversationalRetailLine(calledNumber) ||
         isConversationalRetailLine(routing.phone) ||
         isConversationalRetailLine(org.phone_number));
-    const elevenLabsAdminDemo = useElevenLabsDemo(ctx.job.metadata);
-    const useGptLiveRetailStack = !elevenLabsAdminDemo && shouldUseGptLiveRetailStack({ conversationalRetailLine });
+    const legacyAdminDemo = resolveLegacyAdminDemoStack({
+      jobMetadata: ctx.job.metadata,
+      isSipCall: participant.kind === ParticipantKind.SIP,
+    });
+    const elevenLabsAdminDemo = !legacyAdminDemo && useElevenLabsDemo(ctx.job.metadata);
+    const useGptLiveRetailStack = !legacyAdminDemo && !elevenLabsAdminDemo && shouldUseGptLiveRetailStack({ conversationalRetailLine });
     const gptLiveRetail = useGptLiveRetailStack ? createGptLiveRetailModel() : null;
     const activeGptLiveRetail = Boolean(gptLiveRetail);
     /** 9508 = LiveKit turn loop only; no agent.ts guard rails. */
     const bareLiveKitRetailLane = conversationalRetailLine;
-    const demoExperienceStack = elevenLabsAdminDemo || shouldUseDemoExperienceStack({
+    const demoExperienceStack = !legacyAdminDemo && (elevenLabsAdminDemo || shouldUseDemoExperienceStack({
       testCall,
       factoryFreshLine,
       conversationalRetailLine,
-    });
+    }));
     const testProfile =
       factoryFreshLine || !testCall ? null : await getActiveCallTestProfile();
     const demoScenarios: DemoScenario[] = testCall ? await loadDemoScenarios() : [];
@@ -695,10 +700,10 @@ export default defineAgent({
     const hasCallerIdOnFile =
       callerLine.kind !== 'unknown' && Boolean(callerLine.e164);
 
-    const ttsConfig = elevenLabsAdminDemo ? {model: ELEVEN_DEMO_MODEL, voiceId: ELEVEN_DEMO_VOICE, language: 'en', label: `elevenlabs/${ELEVEN_DEMO_MODEL}:${ELEVEN_DEMO_VOICE}`} : resolveTtsConfig({
+    const ttsConfig = legacyAdminDemo?.tts ?? (elevenLabsAdminDemo ? {model: ELEVEN_DEMO_MODEL, voiceId: ELEVEN_DEMO_VOICE, language: 'en', label: `elevenlabs/${ELEVEN_DEMO_MODEL}:${ELEVEN_DEMO_VOICE}`} : resolveTtsConfig({
       testProfile,
       orgVoiceId: resolveOrgVoiceId(org),
-    });
+    }));
     const activeTtsModel = ttsConfig.model;
     const activeVoiceId = ttsConfig.voiceId;
 
@@ -824,6 +829,7 @@ export default defineAgent({
       activeKnowledgeBlock,
       demoMode: testCall && !factoryFreshLine,
       conversationalRetailMode: conversationalRetailLine,
+      naturalConversationStyle: Boolean(legacyAdminDemo),
       ...(callPersona ? { persona: callPersona } : {}),
       ...(testCall
         ? { demoPlaybookBlock: demoPlaybookBlockFromScenarios(demoScenarios) }
@@ -982,11 +988,13 @@ export default defineAgent({
     };
 
     const inferenceSttModel =
+      legacyAdminDemo?.sttModel ||
       testProfile?.stt_model?.trim() ||
       process.env.LIVEKIT_INFERENCE_STT_MODEL?.trim() ||
       'assemblyai/universal-3-5-pro';
     const inferenceSttLanguage = process.env.LIVEKIT_INFERENCE_STT_LANGUAGE?.trim() || 'en';
     const inferenceLlmModel =
+      legacyAdminDemo?.llmModel ||
       testProfile?.llm_model?.trim() ||
       process.env.LIVEKIT_INFERENCE_LLM_MODEL?.trim() ||
       (demoExperienceStack ? 'openai/gpt-5.6-luna' : 'google/gemma-4-31b-it');
@@ -1111,7 +1119,7 @@ export default defineAgent({
       ? null
       : createCaraLlm({
           inferenceLlmModel,
-          profileLlmProvider: testProfile?.llm_provider ?? null,
+          profileLlmProvider: legacyAdminDemo?.llmProvider ?? testProfile?.llm_provider ?? null,
           reasoningEffort: useBuilderDemoStack ? 'low' : undefined,
           temperature: llmTemperature,
           maxCompletionTokens: llmMaxCompletionTokens,
@@ -1166,7 +1174,7 @@ export default defineAgent({
           ...(endpointMaxMs !== undefined ? { endpointMaxMs } : {}),
         };
 
-    if (conversationalRetailLine && !elevenLabsAdminDemo) {
+    if (conversationalRetailLine && !legacyAdminDemo && !elevenLabsAdminDemo) {
       assertExpectedStack(pipelineLabel);
     }
 
@@ -1189,6 +1197,7 @@ export default defineAgent({
       interruptionMode,
       latencyProfile,
       sttLanguage: inferenceSttLanguage,
+      adminDemoStack: legacyAdminDemo ? 'legacy' : null,
       gptLiveRetail: activeGptLiveRetail,
       gptLiveVoice: gptLiveRetail?.voice ?? null,
       gptLiveAudio: gptLiveRetail?.audioConfig ?? null,

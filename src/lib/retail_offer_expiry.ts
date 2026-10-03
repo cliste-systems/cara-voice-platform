@@ -20,3 +20,9 @@ export function ambiguousHistoricalOfferGuidance(query:string):string|null {
  if (!/\blast\s+(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i.test(query) || /\b\d{4}-\d{2}-\d{2}\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}\b/i.test(query))return null;
  return 'The caller gave an ambiguous historical weekday. Ask which exact calendar date they mean before searching. Do not calculate or choose the date for them, and do not answer from this week’s offers. The current catalogue does not establish historical promotion evidence.';
 }
+
+/** The live lookup filters current promotions and cannot verify an unpublished next campaign. */
+export function futureOfferGuidance(query:string):string|null {
+ if(!/\b(?:offers?|deals?|specials?|promotions?)\b/i.test(query)||! /\b(?:next (?:week|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)|upcoming|future)\b/i.test(query)||/\b(?:expir\w*|end\w*|until|valid\w*|last\w*)\b/i.test(query))return null;
+ return 'This request is for future promotions. Only the currently published offer list is available here. Say that next week’s or the requested future day’s new offers cannot be confirmed yet. Do not substitute today’s offers as the answer or promise that a current offer will continue. Offer a team check if useful.';
+}

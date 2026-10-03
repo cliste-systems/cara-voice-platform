@@ -5,7 +5,7 @@ import {Room,RoomEvent,AudioSource,AudioFrame,LocalAudioTrack,TrackPublishOption
 import {AccessToken,RoomServiceClient,AgentDispatchClient} from 'livekit-server-sdk';
 import {createClient} from '@supabase/supabase-js';
 const arg=(name:string)=>process.argv.find(x=>x.startsWith(`--${name}=`))?.slice(name.length+3);
-const line=arg('line');const first=arg('first-wav');const second=arg('second-wav');
+const line=arg('line');const first=arg('first-wav');const second=arg('second-wav');const third=arg('third-wav');
 if(!line||!first||!second)throw new Error('Require --line, --first-wav and --second-wav. Synthetic audio only.');
 const url=process.env.LIVEKIT_URL!;const key=process.env.LIVEKIT_API_KEY!;const secret=process.env.LIVEKIT_API_SECRET!;
 const host=url.replace(/^wss:/,'https:');
@@ -35,13 +35,14 @@ try{
  await sleep(1500);await play(first);console.log(JSON.stringify({phase:'first_question_sent'}));
  await sleep(14000);await play(second);console.log(JSON.stringify({phase:'second_question_sent'}));
  await sleep(14000);
+ if(third){await play(third);console.log(JSON.stringify({phase:'third_question_sent'}));await sleep(14000);}
 }finally{await room.disconnect();await source.close();await rooms.deleteRoom(roomName).catch(()=>{});}
 console.log(JSON.stringify({phase:'disconnected',receivedFrames,roomName}));
 writeFileSync('/private/tmp/cara-transcript-qa-room.json',JSON.stringify({roomName,receivedFrames}),{mode:0o600});
 // Post-call finalization may include recording upload; wait for the source journal first.
 for(let attempt=0;attempt<40;attempt++){
  const {data}=await db.from('call_transcript_captures').select('id,status,expected_events,persisted_events,call_log_id,completeness').eq('room_name',roomName).order('started_at',{ascending:false}).limit(1).maybeSingle();
- if(data&&data.status!=='recording'){console.log(JSON.stringify({phase:'capture_verified',...data}));process.exit(data.status==='captured'&&receivedFrames>0&&data.completeness?.callerLineCount>=2&&data.completeness?.assistantLineCount>=3?0:1);}
+ if(data&&data.status!=='recording'){console.log(JSON.stringify({phase:'capture_verified',...data}));process.exit(data.status==='captured'&&receivedFrames>0&&data.completeness?.callerLineCount>=(third?3:2)&&data.completeness?.assistantLineCount>=(third?4:3)?0:1);}
  await sleep(1000);
 }
 throw new Error('Capture did not finalize within test window');
