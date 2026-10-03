@@ -763,8 +763,17 @@ const FULFILMENT_QUERY_TOKENS = new Set([
 ]);
 
 /** Location phrases constrain fulfilment; they are not product-name words. */
+const RETAIL_LOCATION_NAMES = [
+  "fruit vegetables", "fruit veg", "meat poultry", "fish seafood", "milk yogurt butter eggs", "milk yoghurt butter eggs",
+  "health wellness", "health beauty", "beauty personal care", "household cleaning", "wine beer spirits", "newsagent tobacconist",
+  "butcher", "butchers", "meat", "deli", "delicatessen", "fish", "seafood", "bakery", "cheese", "dairy", "produce", "fruit", "vegetables",
+  "frozen food", "frozen foods", "frozen", "household", "cleaning", "baby care", "baby", "pet food", "pets", "pet", "soft drinks", "drinks",
+  "alcohol", "wine", "beer", "spirits", "off licence", "off license", "off-licence", "off-license", "health", "beauty", "personal care", "toiletries",
+  "grocery", "groceries", "food cupboard", "chilled food", "chilled", "newsagent", "tobacconist", "confectionery snacks", "confectionery", "snacks",
+];
+const RETAIL_LOCATION_PATTERN = new RegExp(`\\b(?:${RETAIL_LOCATION_NAMES.map(name => name.split(" ").join("(?:[\\s,&]+|\\s+and\\s+)")).join("|")})\\s+(?:counter|department|section|aisle)\\b`, "gi");
 export function stripRetailCounterLocation(query: string): string {
-  return query.replace(/\b(?:butchers?|meat(?:\s+(?:and|&)\s+poultry)?|deli|fish|seafood|bakery|cheese|dairy|produce|fruit(?:\s+(?:and|&)\s+veg(?:etables)?)?|vegetables|frozen(?:\s+foods?)?|household(?:\s+(?:and|&)\s+cleaning)?|cleaning|baby|pets?|drinks|alcohol|wine|beer|spirits|off[- ]licen[cs]e|health(?:\s+(?:and|&)\s+wellness)?|beauty(?:\s+(?:and|&)\s+personal\s+care)?|personal\s+care|toiletries|grocery|groceries|food\s+cupboard|chilled(?:\s+food)?|newsagent|tobacconist)\s+(?:counter|department|section|aisle)\b/gi, " ");
+  return query.replace(RETAIL_LOCATION_PATTERN, " ");
 }
 
 /** Keep nouns that identify products (fish fingers, wine gums, frozen pizza). */
