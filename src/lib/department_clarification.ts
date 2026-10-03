@@ -20,6 +20,7 @@ export function departmentClarification(query: string): string | null {
   if (/\b(?:super\s*(?:7|seven|fresh\s*5)|rewards.*(?:€|\d)|\d+\s+for\s+\d+)\b/.test(q)) return null;
   const words=q.replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean).filter(w=>!FILLER.has(w));
   const subject=words.join(' ');
+  if (/^steaks?$/.test(words.filter(word=>!['meat','butcher','butchers'].includes(word)).join(' '))) return 'Were you after beef steaks, or another kind?';
   if (/^(?:dog|cat) food$/.test(subject)) return 'Was it dry or wet food you were after?';
   const explicitUnnamedDepartment = /\b(?:department|section|aisle)\b/.test(q) && words.length===1;
   if (!subject) return 'What sort of product were you looking for?';

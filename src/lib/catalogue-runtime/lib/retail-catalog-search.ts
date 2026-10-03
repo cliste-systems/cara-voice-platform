@@ -334,7 +334,9 @@ export async function searchNationalRetailCatalog(
         department: row.department,
       });
       const priceConflict = (identityPrices.get(identityKey(row.product_name))?.size ?? 0) > 1;
-      const safePrice = priceConflict ? null : row.national_regular_price_eur;
+      // This column is a historical regular/reference price, not a current shelf price.
+      // Current amounts must come from verified listing/promotion search evidence.
+      const safePrice = null;
       return {
         priceConflict,
         productName: row.product_name,
@@ -345,15 +347,7 @@ export async function searchNationalRetailCatalog(
         discountLabel: null,
         isOnOffer: false,
         score,
-        quoteText: (priceConflict ? "The catalogue has conflicting prices for this named product, so its price needs confirmation. " : "") + formatCatalogStockQuote({
-          productName: row.product_name,
-          department: row.department,
-          currentPriceEur: safePrice,
-          wasPriceEur: null,
-          discountLabel: null,
-          isOnOffer: false,
-          intent: input.intent,
-        }),
+        quoteText: "National range evidence only. No current price or promotion status is verified by this catalogue record. Do not present its historical regular/reference price as today’s price or conclude that no offer exists. " + (priceConflict ? "The catalogue has conflicting prices for this named product, so its price needs confirmation. " : "") + `${row.product_name} is listed in the national SuperValu range. Current shelf price, current promotion status and local assortment or stock are unconfirmed.`,
         serviceArea: row.service_area,
         fulfilment: row.fulfilment,
         priceBasis: row.fulfilment === "counter" ? "counter_unknown" as const : "pack" as const,

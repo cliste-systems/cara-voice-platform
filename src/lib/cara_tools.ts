@@ -1079,7 +1079,10 @@ export class CaraTools {
         !/\b(?:rash|cream|bags?|sacks?|bins?|disposal)\b/i.test(callerNappiesQuery) &&
         !/\b(?:size\s*(?:[0-9]+|one|two|three|four|five|six|seven|eight|nine)|newborn|premature)\b/i.test(callerNappiesQuery) &&
         !/\b(?:examples?|any size|all sizes|rundown)\b/i.test(originalCallerQuery);
-      const broadQuestion = missingNappySize ? 'What size nappies do you need?' : invitedExamples ? null : ((!pendingFulfilmentClarification && !callerProvidedRefinement ? departmentClarification(originalCallerQuery) : null) ?? departmentClarification(lookupQuery));
+      const callerSteakQuestion = departmentClarification(originalCallerQuery);
+      const ambiguousSteaks = callerSteakQuestion?.includes('beef steaks') &&
+        !(ud.sessionFlags.callerCatalogHistory ?? []).slice(0,-1).some(turn=>/\b(?:beef|pork|lamb|turkey|tuna|salmon|sirloin|striploin|ribeye|fillet|topside)\b/i.test(turn));
+      const broadQuestion = missingNappySize ? 'What size nappies do you need?' : invitedExamples ? null : ambiguousSteaks ? callerSteakQuestion : ((!pendingFulfilmentClarification && !callerProvidedRefinement ? departmentClarification(originalCallerQuery) : null) ?? departmentClarification(lookupQuery));
       if (broadQuestion && rewardsPricePoint == null) {
         ud.sessionFlags.pendingProductRefinementClarification = true;
         ud.sessionFlags.pendingProductFulfilmentClarification = false;

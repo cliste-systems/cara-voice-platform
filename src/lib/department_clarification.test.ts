@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import {it} from 'node:test';
 import {departmentClarification,callerBroadensOfferSearch,departmentScope} from './department_clarification.js';
+it('does not silently interpret unspecified steaks as pork',()=>{
+ for(const query of ['steaks','Any steaks on offer at the meat counter?','steak offers'])assert.match(departmentClarification(query)??'',/beef steaks/);
+ for(const query of ['beef steaks','pork steaks','striploin steak'])assert.equal(departmentClarification(query),null);
+});
 it('asks for a product preference across the whole shop, not just alcohol',()=>{
  assert.match(departmentClarification('Any dog food deals?')??'',/dry or wet/);
  assert.equal(departmentClarification('adult dog dry kibble, no cat food'),null);

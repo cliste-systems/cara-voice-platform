@@ -106,6 +106,11 @@ describe('CaraTools current-offer lookup', () => {
     assert.equal(requests.length,0);
     assert.match(result.message,/Ask one short question/);
   });
+  it('does not accept model-chosen pork when the caller only asks for steaks',async()=>{
+    const {requests,result}=await lookup('pork steaks offer',{ok:true,matches:[]},[],undefined,{callerQuery:'Any steaks on offer at the meat counter?'});
+    assert.equal(requests.length,0);
+    assert.match(result.message,/beef steaks/);
+  });
   it('does not answer next Thursday with current ham promotions',async()=>{
     const {requests,result}=await lookup('sliced ham offer',{ok:true,matches:[]},[],undefined,{callerQuery:'What deal is there next Thursday on sliced ham?'});
     assert.equal(requests.length,0);
