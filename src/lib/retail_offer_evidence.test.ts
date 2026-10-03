@@ -91,3 +91,10 @@ test('voice applies the shared variant rules outside deli, including exclusions 
  for(const [query,product_name,department,expected] of cases)assert.equal(matchesRequestedProductVariant(query,{product_name,department,sku:'test',score:1,quote_text:''}),expected,query);
  assert.equal(matchesRequestedDietLabel('Bread, not gluten-free bread',{product_name:'White Bread',department:'Bakery',sku:'test',score:1,quote_text:''}),true);
 });
+
+test('voice retains verified white wine when its leaf department only names a country',()=>{
+ const wine={product_name:'Dona Paula Sauvignon Blanc (75 cl)',department:'Argentina',category_breadcrumb:'Wine/White Wine/Argentina',sku:'wine',score:1,quote_text:''};
+ assert.equal(matchesRequestedProductVariant('white wine offers',wine),true);
+ assert.equal(matchesRequestedWineColor('red wine offers',wine),false);
+ assert.equal(matchesRequestedProductVariant('red wine offers',wine),false);
+});

@@ -89,7 +89,7 @@ export function filterCatalogMatchesByQuery(
   query: string,
   matches: SupervaluCatalogMatch[],
 ): SupervaluCatalogMatch[] {
-  matches = matches.filter(match=>matchesRetailQueryConstraints(query,match.productName,match.department));
+  matches = matches.filter(match=>matchesRetailQueryConstraints(query,match.productName,`${match.department} ${match.categoryBreadcrumb ?? ""}`));
   const identity = (text:string)=>normalizeSearchText(text).replace(/[^a-z0-9]/g, "");
   const requestKey=identity(query);
   const namedMatches=matches.filter(match=>{
@@ -269,6 +269,7 @@ export type SupervaluCatalogProduct = {
 };
 
 export type SupervaluCatalogMatch = {
+  categoryBreadcrumb?: string | null;
   offerWeekStart?: string;
   offerWeekEnd?: string;
   priceConflict?: boolean;
@@ -514,6 +515,7 @@ function syncedOfferToCatalogMatch(offer: WeeklyOfferMatch): SupervaluCatalogMat
   return {
     productName: offer.productName,
     department: offer.department,
+    categoryBreadcrumb: offer.categoryBreadcrumb ?? null,
     sku: offer.sku ?? null,
     offerWeekStart: offer.offerWeekStart,
     offerWeekEnd: offer.offerWeekEnd,

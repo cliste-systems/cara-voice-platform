@@ -10,7 +10,7 @@ export function matchesRequestedWineColor(query:string,match:SearchSupervaluProd
  const red=/\bred wine\b/i.test(query)&&! /\b(?:no|not|without)\s+red wine\b/i.test(query);
  const rose=/\bros[eé]/i.test(query)&&! /\b(?:no|not|without)\s+ros[eé]/i.test(query);
  if(Number(white)+Number(red)+Number(rose)!==1)return true;
- const category=match.department;
+ const category=`${match.department} ${match.category_breadcrumb ?? ""}`;
  if(white&&/\bred\b|\brose\b|rosé|pink/i.test(category))return false;
  if(red&&/\bwhite\b|\brose\b|rosé|pink/i.test(category))return false;
  if(rose&&/\bwhite\b|\bred\b/i.test(category))return false;
@@ -26,7 +26,7 @@ export function alcoholVariantQuestion(query:string,matches:SearchSupervaluProdu
 }
 export function matchesRequestedDietLabel(query:string,match:SearchSupervaluProductsMatch):boolean {
  query=positiveRetailQuery(query);
- const evidence=`${match.product_name} ${match.department}`;
+ const evidence=`${match.product_name} ${match.department} ${match.category_breadcrumb ?? ""}`;
  if(/\bvegan\b/i.test(query)&&! /\b(?:not|no|without)\s+vegan\b/i.test(query)&&! /\bvegan\b/i.test(evidence))return false;
  if(/gluten[- ]free/i.test(query)&&! /gluten[- ]free/i.test(evidence))return false;
  if(/dairy[- ]free/i.test(query)&&! /dairy[- ]free/i.test(evidence))return false;
@@ -57,5 +57,5 @@ export function guardOfferEvidence(match:SearchSupervaluProductsMatch):SearchSup
 
 /** The same evidence constraints protect every department and both lookup paths. */
 export function matchesRequestedProductVariant(query:string,match:SearchSupervaluProductsMatch):boolean {
- return matchesRetailQueryConstraints(query,match.product_name,match.department);
+ return matchesRetailQueryConstraints(query,match.product_name,`${match.department} ${match.category_breadcrumb ?? ""}`);
 }

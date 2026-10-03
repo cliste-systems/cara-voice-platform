@@ -204,6 +204,7 @@ export async function POST(request: Request) {
     price_conflict: match.priceConflict === true,
     product_name: match.productName,
     department: match.department,
+    category_breadcrumb: match.categoryBreadcrumb ?? null,
     sku: match.sku,
     current_price_eur: match.currentPriceEur,
     was_price_eur: match.wasPriceEur,

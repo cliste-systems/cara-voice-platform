@@ -2,7 +2,7 @@
 
 ## Shared rules, rather than individual department patches
 
-The app lookup and voice worker use the same generated catalogue runtime. Product qualifiers and exclusions are enforced on both catalogue and offer candidates. Structural department/location wording is removed from product identity while the original request continues to determine service area and fulfilment. Counter location must never be replaced with a packaged product without explaining and asking where necessary.
+The app lookup and voice worker use the same generated catalogue runtime. Product qualifiers and exclusions are enforced on both catalogue and offer candidates. Full source category breadcrumbs travel through the API to the worker; a leaf category such as a country cannot discard the evidence identifying wine colour or another product family. Worker validation checks the caller’s original request as well as the model’s lookup. Structural department/location wording is removed from product identity while the original request continues to determine service area and fulfilment. Counter location must never be replaced with a packaged product without explaining and asking where necessary.
 
 Every department follows the existing common safeguards: clarify a broad first request; retain the caller's refinements; restrict current promotions by date and freshness; distinguish single price, pack size, per-kilo price and multibuy total; preserve Rewards conditions and eligibility; avoid claiming local stock or universal national coverage. A range-only historical reference price is never a current price. A failed or empty lookup is not proof that no offer exists.
 

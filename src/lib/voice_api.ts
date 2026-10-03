@@ -409,6 +409,7 @@ export type SearchSupervaluProductsPayload = {
 };
 
 export type SearchSupervaluProductsMatch = {
+  category_breadcrumb?: string | null;
   product_name: string;
   department: string;
   sku: string | null;
