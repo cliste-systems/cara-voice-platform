@@ -21,6 +21,17 @@ export function positiveRetailQuery(query: string): string {
 export function matchesRetailQueryConstraints(query: string, name: string, category = ""): boolean {
   const text = `${name} ${category}`.toLowerCase();
   const positive = positiveRetailQuery(query);
+  const normalizedCuts=(value:string)=>value.toLowerCase().replace(/\brib[ -]?eye\b/g,"ribeye").replace(/\bt[ -]?bone\b/g,"tbone");
+  const requestedCuts=["striploin","sirloin","ribeye","topside","rump","tbone"].filter(cut=>new RegExp(`\\b${cut}\\b`,"i").test(normalizedCuts(positive)));
+  if(requestedCuts.length && !requestedCuts.some(cut=>new RegExp(`\\b${cut}\\b`,"i").test(normalizedCuts(text))))return false;
+  const species = ["beef", "pork", "lamb", "chicken", "turkey", "duck", "venison"];
+  const requestedSpecies = species.filter(word=>new RegExp(`\\b${word}\\b`,"i").test(positive));
+  if (requestedSpecies.length===1) {
+    const requested=requestedSpecies[0]!;
+    const nameSpecies=species.filter(word=>new RegExp(`\\b${word}\\b`,"i").test(name));
+    if (nameSpecies.length && !nameSpecies.includes(requested)) return false;
+    if (!new RegExp(`\\b${requested}\\b`,"i").test(text)) return false;
+  }
   if (/\b(?:regular|normal|alcoholic)\b/i.test(query) && /\b(?:guinness|beer|lager|stout|cider)\b/i.test(query) && /0[.,]0|alcohol[- ]free|non[- ]?alcoholic/i.test(name)) return false;
   if (/\badult\b/i.test(query) && /\bdogs?\b/i.test(query) && (!/\badult\b/i.test(text) || /\b(?:puppy|puppies)\b/i.test(name))) return false;
   if (/\bwhisk(?:e)?y\b/i.test(positive) && !/\bwhisk(?:e)?y\b/i.test(text)) return false;
