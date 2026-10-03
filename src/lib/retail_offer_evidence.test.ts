@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {conflictingOfferVariant,guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence,matchesRequestedDeliVariant} from './retail_offer_evidence.js';
+import {conflictingOfferVariant,guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence,matchesRequestedProductVariant} from './retail_offer_evidence.js';
 test('current Rewards price questions do not expose an unrequested historical price',()=>{
  const m={product_name:'Smoothie',department:'Drinks',sku:'1',score:1,current_price_eur:4,was_price_eur:4.99,discount_label:'Rewards Price Only €4',quote_text:'Rewards Price Only four euro. Now four euro. Usually four euro ninety nine. Local stock unconfirmed.'};
  const result=requestedPriceEvidence(m,'How much is this on offer, and is it a Rewards price?');
@@ -54,13 +54,36 @@ test('Mango yogurt does not inherit an explicitly enumerated different-flavour p
 
 test('deli requests cannot inherit an offer from a different preparation or flavour',()=>{
  const base={product_name:'Brady Family Wood Smoked Irish Shredded Ham (90 g)',department:'Ham',service_area:'deli' as const,sku:'smoked',score:1,quote_text:'Two for five euro.'};
- assert.equal(matchesRequestedDeliVariant('Brady Family Traditional Irish Shredded Ham 90 g offer',base),false);
- assert.equal(matchesRequestedDeliVariant('Brady Family Wood-Smoked Irish Shredded Ham 90 g offer',base),true);
- assert.equal(matchesRequestedDeliVariant('Any shredded ham offers?',base),true);
- assert.equal(matchesRequestedDeliVariant('Not traditional ham, wood smoked please',base),true);
- assert.equal(matchesRequestedDeliVariant('Not wood smoked ham',base),false);
- assert.equal(matchesRequestedDeliVariant('Honey roast ham',{...base,product_name:'Honey Roasted Ham'}),true);
- assert.equal(matchesRequestedDeliVariant('Honey roast carved ham offers?',{...base,product_name:'Traditional Carved Ham (120 g)'}),false);
- assert.equal(matchesRequestedDeliVariant('Chicken tikka pieces',{...base,department:'Poultry',product_name:'BBQ Chicken Pieces (100 g)'}),false);
- assert.equal(matchesRequestedDeliVariant('traditional bread',{...base,department:'Bread',service_area:'bakery' as any,product_name:'Brown Bread'}),true);
+ assert.equal(matchesRequestedProductVariant('Brady Family Traditional Irish Shredded Ham 90 g offer',base),false);
+ assert.equal(matchesRequestedProductVariant('Brady Family Wood-Smoked Irish Shredded Ham 90 g offer',base),true);
+ assert.equal(matchesRequestedProductVariant('Any shredded ham offers?',base),true);
+ assert.equal(matchesRequestedProductVariant('Not traditional ham, wood smoked please',base),true);
+ assert.equal(matchesRequestedProductVariant('Not wood smoked ham',base),false);
+ assert.equal(matchesRequestedProductVariant('Honey roast ham',{...base,product_name:'Honey Roasted Ham'}),true);
+ assert.equal(matchesRequestedProductVariant('Honey roast carved ham offers?',{...base,product_name:'Traditional Carved Ham (120 g)'}),false);
+ assert.equal(matchesRequestedProductVariant('Chicken tikka pieces',{...base,department:'Poultry',product_name:'BBQ Chicken Pieces (100 g)'}),false);
+ assert.equal(matchesRequestedProductVariant('traditional bread',{...base,department:'Bread',service_area:'bakery' as any,product_name:'Brown Bread'}),true);
+});
+
+test('voice applies the shared variant rules outside deli, including exclusions and alternatives',()=>{
+ const cases:[string,string,string,boolean][]=[
+  ['Grated cheddar','Cheddar Slices','Cheese',false],
+  ['Grated cheddar','Grated Cheddar','Cheese',true],
+  ['Laundry liquid','Laundry Powder','Household',false],
+  ['Wet cat food','Wet Dog Food','Pets',false],
+  ['Nappies size 6','Nappies Size 5','Baby',false],
+  ['Any size 6 nappies','Nappies Size 6','Baby',true],
+  ['Rosé wine','White Wine','Wine',false],
+  ['Red or white wine','Red Wine','Wine',true],
+  ['Skimmed milk','Semi Skimmed Milk','Milk',false],
+  ['Strawberry yogurt','Vanilla Yogurt','Dairy',false],
+  ['Orange juice','Apple Juice','Drinks',false],
+  ['Shampoo','Conditioner','Beauty',false],
+  ['Breaded cod','Battered Cod','Fish',false],
+  ['Wholemeal bread','White Bread','Bakery',false],
+  ['Thin pizza','Deep Pan Pizza','Frozen',false],
+  ['Puppy food','Adult Dog Food','Pets',false],
+ ];
+ for(const [query,product_name,department,expected] of cases)assert.equal(matchesRequestedProductVariant(query,{product_name,department,sku:'test',score:1,quote_text:''}),expected,query);
+ assert.equal(matchesRequestedDietLabel('Bread, not gluten-free bread',{product_name:'White Bread',department:'Bakery',sku:'test',score:1,quote_text:''}),true);
 });

@@ -1,4 +1,5 @@
 import type {SearchSupervaluProductsMatch} from './voice_api.js';
+import {matchesRetailProductVariants,positiveRetailQuery} from './catalogue-runtime/lib/retail-query-constraints.js';
 import {formatSpokenEurAmount} from './catalogue-runtime/lib/spoken-eur-price.js';
 
 // Only reject explicitly contradictory variant families. Generic range names
@@ -24,6 +25,7 @@ export function alcoholVariantQuestion(query:string,matches:SearchSupervaluProdu
  return null;
 }
 export function matchesRequestedDietLabel(query:string,match:SearchSupervaluProductsMatch):boolean {
+ query=positiveRetailQuery(query);
  const evidence=`${match.product_name} ${match.department}`;
  if(/\bvegan\b/i.test(query)&&! /\b(?:not|no|without)\s+vegan\b/i.test(query)&&! /\bvegan\b|plant[- ]based|meat[- ]free/i.test(evidence))return false;
  if(/gluten[- ]free/i.test(query)&&! /gluten[- ]free/i.test(evidence))return false;
@@ -53,17 +55,7 @@ export function guardOfferEvidence(match:SearchSupervaluProductsMatch):SearchSup
  return {...match,is_on_offer:false,discount_label:null,quote_text:`${match.product_name}. ${price!=null?`Verified current listed single price ${formatSpokenEurAmount(price)}.`:'No verified single price is supplied.'} The source promotion names a different product or pack. Eligibility for this exact product is not verified. Do not quote the conflicting bundle as an offer for this item or speculate about its history. This is a national listing; local assortment and stock are not confirmed.`};
 }
 
-/** Deli preparation/flavour qualifiers identify different products, not optional filler. */
-export function matchesRequestedDeliVariant(query:string,match:SearchSupervaluProductsMatch):boolean {
- const normalize=(text:string)=>text.toLowerCase().replace(/[-’']/g,' ').replace(/\bhoney roasted\b/g,'honey roast').replace(/\bwoodsmoked\b/g,'wood smoked').replace(/\s+/g,' ');
- const requested=normalize(query),product=normalize(match.product_name);
- if(!/\b(?:ham|chicken|turkey|salami|chorizo|fuet|pancetta|prosciutto|beef|pastrami)\b/.test(requested)||
-    !(match.service_area==='deli'||/sliced cooked meats|\bham\b|continental meats/i.test(match.department)))return true;
- for(const qualifier of ['traditional','wood smoked','honey roast','wafer thin','crumbed','carved','shredded','tikka']) {
-  const requestedQualifier=new RegExp(`\\b${qualifier}\\b`).test(requested);
-  const excluded=new RegExp(`\\b(?:not|no|without)\\s+${qualifier}\\b`).test(requested);
-  const productQualifier=new RegExp(`\\b${qualifier}\\b`).test(product);
-  if(requestedQualifier&&(excluded?productQualifier:!productQualifier))return false;
- }
- return true;
+/** The same evidence constraints protect every department and both lookup paths. */
+export function matchesRequestedProductVariant(query:string,match:SearchSupervaluProductsMatch):boolean {
+ return matchesRetailProductVariants(query,match.product_name,match.department);
 }

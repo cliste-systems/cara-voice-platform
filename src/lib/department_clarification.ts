@@ -1,6 +1,6 @@
 /** A department names a place to look, not the caller's product preference. */
 const DEPARTMENTS = new Set([
-  'soft drink', 'soft drinks', 'fizzy drink', 'fizzy drinks', 'non alcoholic drinks', 'alcohol', 'alcoholic drinks', 'drinks', 'off licence', 'off license',
+  'confectionery snacks', 'soft drink', 'soft drinks', 'fizzy drink', 'fizzy drinks', 'non alcoholic drinks', 'alcohol', 'alcoholic drinks', 'drinks', 'off licence', 'off license',
   'sliced meat', 'sliced meats', 'cooked meats', 'meat', 'butcher', 'butchers', 'deli', 'delicatessen', 'fish', 'seafood',
   'bakery', 'dairy', 'produce', 'fruit', 'veg', 'vegetables', 'fruit veg', 'fruit vegetables',
   'frozen', 'frozen food', 'household', 'cleaning', 'baby', 'baby care', 'pet', 'pets', 'pet food',
@@ -30,7 +30,7 @@ export function departmentClarification(query: string): string | null {
 export function callerInvitesExamples(query:string):boolean {
  return /\b(?:show|give|choose|pick|list)\b.{0,60}\bexamples\b/i.test(query) || /\b(?:surprise me|(?:anything|any items?|any department) (?:is|are) fine|whatever you recommend|(?:a few|some|offer|verified|two|three|couple of) examples|choose.*(?:examples|offers?)|give me a selection|show me a selection|all departments|every department|whole shop|all.shop rundown)\b/i.test(query);
 }
-const SCOPE_GROUPS=[['deli','delicatessen'],['alcohol','off licence','off license','wine','beer','spirits'],['meat','butcher','poultry'],['fish','seafood'],['bakery'],['dairy','milk','yogurt','yoghurt','butter','eggs'],['produce','fruit','veg','vegetables'],['frozen'],['household','cleaning'],['baby','nappies','nappy'],['pets','pet','dog','cat'],['health','wellness'],['beauty','personal care','toiletries','cosmetics'],['cheese'],['chilled'],['food cupboard','grocery','groceries','ambient'],['drinks','soft drinks'],['newsagent','tobacconist']];
+const SCOPE_GROUPS=[['deli','delicatessen'],['alcohol','off licence','off license','wine','beer','spirits'],['meat','butcher','poultry'],['fish','seafood'],['bakery'],['dairy','milk','yogurt','yoghurt','butter','eggs'],['produce','fruit','veg','vegetables'],['frozen'],['household','cleaning'],['baby','nappies','nappy'],['pets','pet','dog','cat'],['health','wellness'],['beauty','personal care','toiletries','cosmetics'],['cheese'],['chilled'],['food cupboard','grocery','groceries','ambient'],['drinks','soft drinks'],['newsagent','tobacconist'],['confectionery','snacks','crisps','sweets']];
 export function departmentName(scope:number|undefined):string|undefined { return scope===undefined ? undefined : SCOPE_GROUPS[scope]?.[0]; }
 export function departmentScope(query:string):number|undefined {
  const normalized=query.toLowerCase().replace(/[-&]/g,' ');

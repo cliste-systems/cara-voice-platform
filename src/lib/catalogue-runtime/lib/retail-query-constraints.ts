@@ -1,5 +1,51 @@
 // @ts-nocheck -- generated source is checked by the app build and catalogue tests.
 // Generated from cara-platform by scripts/sync-catalogue-runtime.py. Do not edit.
+/** Explicit product variants must be supported by the product or category evidence.
+ * Context keeps words such as pods, white and sliced from constraining unrelated products.
+ * Multiple alternatives in one family are allowed; missing evidence is not a match.
+ */
+const VARIANT_RULES: {context: RegExp; variants: RegExp[]}[] = [
+  {context:/\b(?:ham|chicken|turkey|salami|beef|pastrami)\b/, variants:[/\btraditional\b/,/\bwood smoked\b/,/\bhoney roast(?:ed)?\b/,/\bwafer thin\b/,/\bcrumbed\b/,/\bcarved\b/,/\bshredded\b/,/\btikka\b/]},
+  {context:/\bcheese|\bcheddar|\bmozzarella|\bgouda/, variants:[/\bgrated\b/,/\bslic(?:ed|es)\b/,/\b(?:block|solid block)\b/,/\b(?:spread|spreadable)\b/]},
+  {context:/\b(?:milk|yogurt|yoghurt|cream)\b/, variants:[/\b(?:whole|full fat)\b/,/\b(?:semi skimmed|low fat)\b/,/(?<!semi )\bskimmed\b/]},
+  {context:/\bwine\b/, variants:[/\bred\b/,/\bwhite\b/,/\bros(?:e\b|é(?=\s|$))/]},
+  {context:/\b(?:laundry|detergent|washing)\b/, variants:[/\b(?:pods?|capsules?)\b/,/\bliquid\b/,/\bpowder\b/]},
+  {context:/\b(?:shampoo|conditioner)\b/, variants:[/\bshampoo\b/,/\bconditioner\b/]},
+  {context:/\b(?:dog|cat|canine|feline|puppy|puppies|kitten|kittens)\b/, variants:[/\b(?:dog|dogs|canine)\b/,/\b(?:cat|cats|feline)\b/]},
+  {context:/\b(?:dog|cat|canine|feline|puppy|puppies|kitten|kittens)\b/, variants:[/\b(?:wet|pouches?)\b/,/\b(?:dry|kibble)\b/]},
+  {context:/\b(?:dog|cat|canine|feline|puppy|puppies|kitten|kittens)\b/, variants:[/\b(?:puppy|puppies)\b/,/\bkittens?\b/,/\badult\b/]},
+  {context:/\b(?:bread|rolls?|bagels?)\b/, variants:[/\bwholemeal\b/,/\bbrown\b/,/\bwhite\b/,/\bsourdough\b/]},
+  {context:/\b(?:rice|pasta)\b/, variants:[/\b(?:microwave|ready to heat)\b/]},
+  {context:/\b(?:yogurt|yoghurt|juice|ice cream)\b/, variants:[/\bstrawberry\b/,/\braspberry\b/,/\bvanilla\b/,/\bmango\b/,/\bpeach\b/,/\bblueberry\b/,/\borange\b/,/\bapple\b/]},
+  {context:/\b(?:pizza)\b/, variants:[/\bthin\b/,/\bdeep pan\b/]},
+  {context:/\b(?:salmon|trout|mackerel|haddock|cod)\b/, variants:[/\bsmoked\b/,/\bbreaded\b/,/\bbattered\b/]},
+];
+function normalizeVariant(text:string):string {
+ return text.toLowerCase().replace(/[-’']/g,' ').replace(/\bwoodsmoked\b/g,'wood smoked').replace(/\s+/g,' ');
+}
+export function matchesRetailProductVariants(query:string,name:string,category=''):boolean {
+ const original=normalizeVariant(query), positive=normalizeVariant(positiveRetailQuery(query));
+ const evidence=normalizeVariant(`${name} ${category}`);
+ const exclusions=[...original.matchAll(/\b(?:not|no(?!\s+(?:drain|added\s+sugar|artificial))|without|excluding|except|rather than)\s+(?:the\s+)?([^,.!?;]+)/g)].map(m=>m[1]!);
+ for(const rule of VARIANT_RULES) {
+  if(!rule.context.test(original))continue;
+  const requested=rule.variants.filter(v=>v.test(positive));
+  const supported=requested;
+  if(supported.length && (/\bor\b/.test(positive) ? !supported.some(v=>v.test(evidence)) : !supported.every(v=>v.test(evidence))))return false;
+  for(const exclusion of exclusions)for(const variant of rule.variants) {
+   if(variant.test(exclusion)&&variant.test(evidence))return false;
+  }
+ }
+ // Sizes identify baby products, rather than an arbitrary numeral in a pack name.
+ const size=/\b(?:napp(?:y|ies)|diapers?|pull ups?)\b/.test(positive)?positive.match(/\bsize\s*(\d+)\b/):null;
+ if(size&&(!/\b(?:napp(?:y|ies)|diapers?|pull ups?)\b/.test(evidence)||!new RegExp(`\\bsize\\s*${size[1]}\\b`).test(evidence)))return false;
+ // These labels are evidence requirements, never allergy or certification guarantees.
+ for(const label of [/\bgluten free\b/,/\bdairy free\b/,/\bvegan\b/]) {
+  if(label.test(positive)&&!label.test(evidence)&&!(label.source==='\\bvegan\\b'&&/\bplant based\b/.test(evidence)))return false;
+ }
+ return true;
+}
+
 /** Keep exclusions out of positive matching, but enforce them on candidates. */
 export function positiveRetailQuery(query: string): string {
   return query
@@ -19,6 +65,7 @@ export function positiveRetailQuery(query: string): string {
     .replace(/\s+/g, " ").trim();
 }
 export function matchesRetailQueryConstraints(query: string, name: string, category = ""): boolean {
+  if (!matchesRetailProductVariants(query,name,category)) return false;
   const text = `${name} ${category}`.toLowerCase();
   const positive = positiveRetailQuery(query);
   const normalizedCuts=(value:string)=>value.toLowerCase().replace(/\brib[ -]?eye\b/g,"ribeye").replace(/\bt[ -]?bone\b/g,"tbone");
@@ -72,7 +119,7 @@ export function matchesRetailQueryConstraints(query: string, name: string, categ
     const type = /\bstout\b/i.test(query) ? /\bstout\b/i : /\b(?:lager|pilsner)\b/i;
     if (!type.test(text)) return false;
   }
-  if (/\bwhite wine\b/i.test(positiveRetailQuery(query)) && !/\bwhite\b/i.test(text)) return false;
+  if (!/\bor\b/i.test(positive) && /\bwhite wine\b/i.test(positive) && !/\bwhite\b/i.test(text)) return false;
   if (/\bdairy[- ]free\b/i.test(query) && /\bice cream\b/i.test(query) && !/dairy[- ]free|non[- ]dairy|vegan|swedish glace|plant[- ]based/i.test(text)) return false;
   return true;
 }

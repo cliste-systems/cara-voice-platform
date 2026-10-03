@@ -764,7 +764,7 @@ const FULFILMENT_QUERY_TOKENS = new Set([
 
 /** Location phrases constrain fulfilment; they are not product-name words. */
 export function stripRetailCounterLocation(query: string): string {
-  return query.replace(/\b(?:butchers?|meat|deli|fish|seafood|bakery|cheese)\s+(?:counter|department|section|aisle)\b/gi, " ");
+  return query.replace(/\b(?:butchers?|meat(?:\s+(?:and|&)\s+poultry)?|deli|fish|seafood|bakery|cheese|dairy|produce|fruit(?:\s+(?:and|&)\s+veg(?:etables)?)?|vegetables|frozen(?:\s+foods?)?|household(?:\s+(?:and|&)\s+cleaning)?|cleaning|baby|pets?|drinks|alcohol|wine|beer|spirits|off[- ]licen[cs]e|health(?:\s+(?:and|&)\s+wellness)?|beauty(?:\s+(?:and|&)\s+personal\s+care)?|personal\s+care|toiletries|grocery|groceries|food\s+cupboard|chilled(?:\s+food)?|newsagent|tobacconist)\s+(?:counter|department|section|aisle)\b/gi, " ");
 }
 
 /** Keep nouns that identify products (fish fingers, wine gums, frozen pizza). */

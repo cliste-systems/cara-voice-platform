@@ -38,3 +38,12 @@ it('lunch, party, sliced-meat and generic multibuy requests still need an initia
  assert.equal(departmentClarification('Chicken tikka offers for lunch'),null);
  assert.equal(departmentClarification('Show me a few current deli examples, packed ones are fine too'),null);
 });
+
+it('snacks and confectionery have their own follow-up scope and do not inherit alcohol searches',()=>{
+ assert.ok(departmentClarification('Confectionery and snacks offers?'));
+ const department=departmentScope('confectionery');
+ assert.ok(department!==undefined);
+ assert.equal(departmentScope('snacks'),department);
+ assert.equal(callerBroadensOfferSearch('Any offers at all on snacks?',[],{callerQuery:'chocolate sweets',department}),true);
+ assert.equal(callerBroadensOfferSearch('Any offers at all on wine?',[],{callerQuery:'chocolate sweets',department}),false);
+});

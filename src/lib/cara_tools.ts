@@ -1,6 +1,6 @@
 import {requestedPackTotalQuote,requestedCounterWeightQuote,verifiedSavingsQuote} from './retail_quantity_quote.js';
 import {namedPackLookupQuery,counterWeightLookupQuery,mergeProductRefinement} from './retail_lookup_query.js';
-import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence,matchesRequestedDeliVariant} from './retail_offer_evidence.js';
+import {guardOfferEvidence,spokenOfferMatches,matchesRequestedDietLabel,alcoholVariantQuestion,matchesRequestedWineColor,requestedPriceEvidence,matchesRequestedProductVariant} from './retail_offer_evidence.js';
 import {callerRequestsOfferDates,spokenVerifiedExpiry,historicalOfferGuidance,ambiguousHistoricalOfferGuidance,futureOfferGuidance} from './retail_offer_expiry.js';
 import { departmentClarification,callerInvitesExamples,callerBroadensOfferSearch,departmentScope,departmentName } from './department_clarification.js';
 import { CARA_CLARIFICATION_POLICY } from "./clarification_policy.js";
@@ -1277,7 +1277,7 @@ export class CaraTools {
       ud.sessionFlags.pendingProductLookupQuery = null;
       ud.sessionFlags.pendingProductSearchState = null;
 
-      result.matches=result.matches.filter(match=>matchesRequestedDietLabel(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedWineColor(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedDeliVariant(originalCallerQuery,match));
+      result.matches=result.matches.filter(match=>matchesRequestedDietLabel(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedWineColor(`${originalCallerQuery} ${lookupQuery}`,match)&&matchesRequestedProductVariant(originalCallerQuery,match));
       const variantQuestion=invitedExamples?null:alcoholVariantQuestion(lookupQuery,result.matches);
       if(variantQuestion){
         ud.sessionFlags.pendingAlcoholVariantQuestion=variantQuestion;
