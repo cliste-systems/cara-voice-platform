@@ -71,7 +71,7 @@ export function matchesRetailQueryConstraints(query: string, name: string, categ
   if (/\bbread\b/i.test(positive) && (!/\b(?:bread|loaf|loaves|breadrolls?|crispbread)\b/i.test(text) || /\b(?:spaghetti|pasta|tortillas?|wraps?|breaded)\b/i.test(name))) return false;
   if (/\b(?:yogurt|yoghurt)\b/i.test(positive) && !/\b(?:yogurt|yoghurt)\b/i.test(text)) return false;
   if (/\bjuice\b/i.test(positive) && !/\bjuice\b/i.test(text)) return false;
-  if (/\blaundry\b/i.test(positive) && (!/\blaundry\b|washing detergent|fabric wash/i.test(text) || /dishwash|washing up/i.test(text))) return false;
+  if (/\blaundry\b/i.test(positive) && (!/\b(?:laundry|detergent)\b|fabric wash/i.test(text) || /dishwash|washing up/i.test(text))) return false;
   const normalizedCuts=(value:string)=>value.toLowerCase().replace(/\brib[ -]?eye\b/g,"ribeye").replace(/\bt[ -]?bone\b/g,"tbone");
   const requestedCuts=["striploin","sirloin","ribeye","topside","rump","tbone"].filter(cut=>new RegExp(`\\b${cut}\\b`,"i").test(normalizedCuts(positive)));
   if(requestedCuts.length && !requestedCuts.some(cut=>new RegExp(`\\b${cut}\\b`,"i").test(normalizedCuts(text))))return false;
