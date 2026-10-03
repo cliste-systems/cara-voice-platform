@@ -68,6 +68,9 @@ test('deli requests cannot inherit an offer from a different preparation or flav
 
 test('voice applies the shared variant rules outside deli, including exclusions and alternatives',()=>{
  const cases:[string,string,string,boolean][]=[
+  ['Smoked mackerel','Smoked Rainbow Trout','Smoked Fish',false],
+  ['Wholemeal bread','Wholemeal Spaghetti','Meals',false],
+  ['Wholemeal bread','Wholemeal Tortilla Wraps','Bread',false],
   ['Grated cheddar','Cheddar Slices','Cheese',false],
   ['Grated cheddar','Grated Cheddar','Cheese',true],
   ['Laundry liquid','Laundry Powder','Household',false],

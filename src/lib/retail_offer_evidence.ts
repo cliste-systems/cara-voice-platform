@@ -1,5 +1,5 @@
 import type {SearchSupervaluProductsMatch} from './voice_api.js';
-import {matchesRetailProductVariants,positiveRetailQuery} from './catalogue-runtime/lib/retail-query-constraints.js';
+import {matchesRetailQueryConstraints,positiveRetailQuery} from './catalogue-runtime/lib/retail-query-constraints.js';
 import {formatSpokenEurAmount} from './catalogue-runtime/lib/spoken-eur-price.js';
 
 // Only reject explicitly contradictory variant families. Generic range names
@@ -57,5 +57,5 @@ export function guardOfferEvidence(match:SearchSupervaluProductsMatch):SearchSup
 
 /** The same evidence constraints protect every department and both lookup paths. */
 export function matchesRequestedProductVariant(query:string,match:SearchSupervaluProductsMatch):boolean {
- return matchesRetailProductVariants(query,match.product_name,match.department);
+ return matchesRetailQueryConstraints(query,match.product_name,match.department);
 }
