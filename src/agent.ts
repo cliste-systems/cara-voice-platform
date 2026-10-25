@@ -104,8 +104,12 @@ import {
   callerE164ForBlocklist,
   checkCallerBlocklist,
   rejectBlockedCaller,
+  rejectPublicDemoCaller,
   stableCallSidFallback,
 } from './lib/caller_blocklist.js';
+import { callDurationLimitMinutes, isPublicDemoCall, reservePublicDemoCall } from './lib/public_demo_limits.js';
+import { reservePublicDemoSession } from './lib/public_demo_session.js';
+import { createExtractionObserver } from './lib/extraction_observer.js';
 import { classifyCallerLine, type CallerLineInfo } from './lib/phone_classify.js';
 import {
   classifyPipelineErrorStage,
@@ -674,6 +678,36 @@ export default defineAgent({
       });
       return;
     }
+
+    const publicDemoCall = isPublicDemoCall({ isDemoLine: testCall, isSipCall: participant.kind === ParticipantKind.SIP });
+    const demoAdmission = await reservePublicDemoCall({
+      organizationId: org.id, callerE164,
+      isDemoLine: testCall, isSipCall: participant.kind === ParticipantKind.SIP,
+    });
+    if (!demoAdmission.allowed) {
+      await rejectPublicDemoCaller({ ctx, participant, org, callerNumberRaw, callerE164, calledNumber }, demoAdmission.reason === 'unavailable' ? 'unavailable' : 'limited');
+      return;
+    }
+
+    const demoSession = await reservePublicDemoSession({
+      organizationId: org.id, roomName: ctx.room.name ?? '',
+      isDemoLine: testCall, isSipCall: participant.kind === ParticipantKind.SIP,
+    });
+    if (!demoSession.allowed) {
+      await rejectPublicDemoCaller({ ctx, participant, org, callerNumberRaw, callerE164, calledNumber }, demoSession.reason);
+      return;
+    }
+    const demoLease = demoSession.lease;
+    const demoLeaseTimer = demoLease ? setTimeout(() => {
+      void disconnectParticipant(ctx.room.name ?? '', participant.identity).catch(() => undefined);
+      // Stop local inference even if the remote hang-up request is unavailable.
+      ctx.shutdown('public_demo_lease_expired');
+    }, Math.max(1, demoLease.expiresAtMs - Date.now())) : undefined;
+    demoLeaseTimer?.unref();
+    if (demoLease) ctx.addShutdownCallback(async () => {
+      if (demoLeaseTimer) clearTimeout(demoLeaseTimer);
+      await demoLease?.release();
+    });
 
     const businessFiles = await getSendableBusinessFiles(org.id);
     const caraTools = new CaraTools();
@@ -2003,6 +2037,7 @@ export default defineAgent({
       return true;
     };
 
+    const observeExtraction = createExtractionObserver();
     const ingestCallerFinalText = (
       text: string,
       bumpReason: string,
@@ -2013,6 +2048,15 @@ export default defineAgent({
       lastCallerUtterance = trimmed;
       const key = normalizeTranscriptKey(text);
       if (isDuplicateCallerUtterance(key, at)) return false;
+      for (const observation of observeExtraction(text)) {
+        diag.push('info', 'extraction_attempt_observed', observation);
+        reportPlatformEvent({
+          severity: observation.repeated ? 'warning' : 'info', category: 'worker',
+          eventType: 'extraction_attempt_observed',
+          message: observation.repeated ? 'Repeated requests for internal AI configuration were observed.' : 'A request for internal AI configuration was observed.',
+          organizationId: org.id, metadata: observation,
+        });
+      }
       settleGreetingPhase('caller_spoke');
       appendTranscriptLine(at, `Caller: ${text}`);
       session.userData.sessionFlags.likelySttGarble = false;
@@ -2877,9 +2921,7 @@ export default defineAgent({
       }
     });
 
-    const maxCallMinutesRaw = Number.parseInt(process.env.CLISTE_MAX_CALL_MINUTES ?? '30', 10);
-    const maxCallMinutes = Number.isFinite(maxCallMinutesRaw)
-      ? Math.min(Math.max(maxCallMinutesRaw, 1), 120) : 30;
+    const maxCallMinutes = callDurationLimitMinutes(publicDemoCall);
     const maxCallTimer = setTimeout(() => {
       console.warn('[agent] maximum call duration reached', { orgId: org.id, maxCallMinutes });
       if (roomName && participant.identity) {
@@ -2892,6 +2934,8 @@ export default defineAgent({
 
     session.on(voice.AgentSessionEventTypes.Close, () => {
       clearTimeout(maxCallTimer);
+      if (demoLeaseTimer) clearTimeout(demoLeaseTimer);
+      void demoLease?.release();
       if (callLogWritten) return;
       clearAllGuardTimers();
 
