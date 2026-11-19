@@ -1,0 +1,27 @@
+name: Resolve V1 dependency locks
+on:
+  push:
+    branches: [ci/v1-lockfile-refresh]
+    paths: [.github/workflows/v1-lockfile-refresh.yml]
+permissions:
+  contents: write
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Refresh dependency lock on this review branch
+        run: |
+          npm audit fix --package-lock-only --ignore-scripts --no-fund || true
+          npm ci --ignore-scripts --no-fund
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add package.json package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Resolve V1 dependency locks with npm"
+            git push origin HEAD:ci/v1-lockfile-refresh
+          fi
+          npm audit --audit-level=high
