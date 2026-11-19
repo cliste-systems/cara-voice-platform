@@ -80,6 +80,7 @@ export async function updateCallLogEnrichment(
     aiSummary?: string | null;
     costEstimate?: CallCostEstimateRecord | null;
     callResolution?: string | null;
+    knowledgeGaps?: Array<{topic:string;caller_context?:string;cara_question?:string}>;
   },
 ): Promise<boolean> {
   if (isOfflinePlayground()) return false;
@@ -102,18 +103,23 @@ export async function updateCallLogEnrichment(
   if (input.costEstimate !== undefined) {
     patch.cost_estimate = input.costEstimate;
   }
+  if (input.knowledgeGaps?.length) {
+    patch.pending_knowledge_gaps = input.knowledgeGaps;
+    patch.knowledge_gap_attempts = 0;
+    patch.knowledge_gap_retry_at = null;
+  }
   if (input.callResolution !== undefined) {
     patch.call_resolution = input.callResolution;
   }
   if (Object.keys(patch).length === 0) return true;
 
   const supabase = getSupabaseClient();
-  const { error } = await supabase.from('call_logs').update(patch).eq('id', id);
+  const { data, error } = await supabase.from('call_logs').update(patch).eq('id', id).is('caller_data_erased_at', null).select('id');
   if (error) {
     console.error('updateCallLogEnrichment failed', error);
     return false;
   }
-  return true;
+  return Boolean(data?.length);
 }
 
 export async function updateCallLogOutcome(callLogId: string, outcome: string): Promise<boolean> {
@@ -148,15 +154,15 @@ export async function updateCallLogAudioPath(
   if (!id || !path) return false;
 
   const supabase = getSupabaseClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('call_logs')
     .update({ audio_storage_path: path })
-    .eq('id', id);
+    .eq('id', id).is('caller_data_erased_at', null).select('id');
   if (error) {
     console.error('updateCallLogAudioPath failed', error);
     return false;
   }
-  return true;
+  return Boolean(data?.length);
 }
 
 export async function updateCallLogPostCallProcessing(
@@ -186,7 +192,7 @@ export async function updateCallLogPostCallProcessing(
   }
 
   const supabase = getSupabaseClient();
-  const { error } = await supabase.from('call_logs').update(patch).eq('id', id);
+  const { data, error } = await supabase.from('call_logs').update(patch).eq('id', id).is('caller_data_erased_at', null).select('id');
   if (error) {
     console.error('updateCallLogPostCallProcessing failed', error);
     return false;

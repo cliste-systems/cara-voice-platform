@@ -1,0 +1,122 @@
+HelloCara anti-extraction hardening — 25 October 2026
+
+Scope and status
+
+This is a local, reviewable first hardening pass across cara-voice-platform and
+cara-platform. No production deployment or permanent database change was made.
+Existing unrelated changes in both checkouts were preserved. This is not a full
+penetration test, live call review, or guarantee against reverse engineering.
+
+Changes in the voice worker
+
+Only SIP telephone calls to lines classified by isTestCall are subject to the new
+public demo admission control. Ordinary customer calls and admin browser/text
+rehearsals bypass it. The existing customer maximum duration and any shorter
+signup setup allowance are retained. Public demo calls have an eight-minute cap.
+
+Admission uses the existing service-role-only auth_rate_limit_record_failure RPC.
+It serializes reservations and survives worker restarts. A keyed hash of the
+organisation and normalized caller number identifies the counter; the raw number
+is not written into the counter. The caller can start eight calls before a
+15-minute cooldown. Withheld callers share a larger allowance of 24 per demo
+organisation. The existing function resets the count after 15 minutes of
+inactivity, or after cooldown expiry; it is not a fixed calendar window.
+Further attempts during a lock do not extend that lock.
+
+If allowance verification fails, only a public demo call is refused. Rejections
+use the existing rejection voice/playout and disconnect path, with an accurate
+summary stating why the demo was stopped. No caller is added to the blocklist.
+The existing outcome vocabulary records these as blocked. No fabricated speech
+is written into a transcript and no recording/capture settings were changed.
+
+Tool regressions exercise guessed routes and forged tenant, room and URL values.
+The saved route and server-bound call context remain authoritative even when
+the model provides replacement values. These tests do not demonstrate resistance
+to every prompt extraction or prompt injection technique.
+
+Changes in the dashboard
+
+Browser file-preview helpers were separated from internal file prompt assembly.
+The upload UI now imports only the preview helpers. Existing backend exports
+remain compatible. A regression check walks client imports, lazy imports and
+re-exports, and rejects paths to selected private prompt modules or modules
+marked server-only. Type-only imports and server action references remain valid.
+This source check covers locally resolved imports, not arbitrary runtime code
+or third-party package contents; Next.js compilation provides additional checks.
+
+Voice preview failures now return a generic message, retaining 502/503 status
+classification without echoing provider responses or deployment configuration.
+The unauthenticated missing-webhook-configuration response is also generic.
+Admin, dashboard, onboarding and voice API responses receive private/no-store
+cache headers. Browser source maps are explicitly disabled, and Sentry's source
+map deletion after upload is explicitly retained. No screen layout changed.
+
+Verification
+
+Both production builds and TypeScript checks passed. The final voice-worker
+suite passed all 456 tests, including the additional tool-boundary regressions.
+The 13 demo golden checks passed. Focused dashboard security, browser-boundary,
+file-preview/search and error-disclosure checks passed all 39 tests.
+
+The full dashboard suite passed 1,370 of 1,393 tests, with 23 failures in existing
+signup, session and setup checks. A separate copy preserving the user's current
+work but removing this pass's modifications reproduced the same 23 failures.
+Those failures were not changed as part of this hardening work.
+
+The generated dashboard build had zero .map files beneath .next/static and no
+match for the internal business-file lookup instruction. Its routes manifest
+contained the new API cache headers. These are local build checks, not evidence
+of what the currently deployed site serves.
+
+A transaction-only database check admitted the first eight synthetic requests,
+locked the ninth, and verified that another request kept the live lock. It then
+rolled back. No customer rows or recordings were read; no fixture remained.
+
+Remaining work and rollout constraints
+
+1. Direct database prompt access: live metadata checks found that anon cannot
+   select organisations, while authenticated users have SELECT access including
+   custom_prompt, subject to row-level policies. The compiled organisation prompt
+   should therefore be treated as readable by its authorised account. This is
+   not evidence of cross-account disclosure. The worker's full runtime prompt
+   and implementation are separate. Removing this access needs coordinated
+   changes to projections, provisioning, existing RPCs and Realtime behaviour;
+   do not revoke table privileges as an isolated production change.
+
+2. Aggregate abuse control: per-caller admission is not an organisation-wide
+   concurrent-call lease or a daily spend budget. Caller ID can be changed or
+   spoofed, and attackers can use multiple numbers. Withheld callers share an
+   allowance, so exhausting it can temporarily affect other withheld callers.
+   A separate atomic organisation budget/concurrency lease needs expiry,
+   heartbeat, release and failure-recovery tests before enforcement.
+
+3. Extraction monitoring: no new speech classifier, outbound content filter or
+   alerting service was added. Avoid copying raw customer speech into security
+   telemetry. Test any detector for false positives against ordinary business
+   questions before giving it authority to interrupt real calls.
+
+4. Private assets: the new regression cases improve a private quality baseline;
+   they do not create proprietary integration rights, a full evaluation corpus,
+   or a custom model. Build a versioned synthetic scenario set for normal tasks,
+   recovery, cross-tenant attempts and extraction attempts, with measured live
+   outcomes. Customer recordings require existing access/retention permissions.
+
+5. Before rollout, test a normal public demo call, cooldown rejection, a regular
+   customer call, an admin rehearsal, greeting playback and a valid file lookup
+   in an isolated test account. Review any call via CALL-REVIEW-RUNBOOK.md and
+   export-call-review.ts; do not equate prompt assertions with caller-heard audio.
+   Verify current edge rules, direct hosting-origin access and deployed assets.
+   Existing unrelated dashboard test failures remain a release consideration.
+
+Rollback
+
+No schema rollback is required. Revert only this pass's changes, preserving the
+pre-existing agent/setup/billing/UI work. Restore the original timer calculation
+and remove the demo admission branch together; remove their import as well.
+The public_demo_call counters can expire normally and affect no other scopes.
+
+References
+
+REA project: https://github.com/morluto/rea
+OWASP prompt leakage: https://genai.owasp.org/llmrisk/llm072025-system-prompt-leakage/
+Supabase column security: https://supabase.com/docs/guides/database/postgres/column-level-security

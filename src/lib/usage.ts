@@ -204,11 +204,11 @@ export function planQuotaMinutes(tier: string | null | undefined): number | null
     case 'starter':
       return 150;
     case 'pro':
-      return 500;
+      return 400;
     case 'business':
-      return 1500;
+      return 800;
     case 'enterprise':
-      return 4000;
+      return 2000;
     default:
       return null;
   }

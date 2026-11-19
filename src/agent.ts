@@ -104,8 +104,12 @@ import {
   callerE164ForBlocklist,
   checkCallerBlocklist,
   rejectBlockedCaller,
+  rejectPublicDemoCaller,
   stableCallSidFallback,
 } from './lib/caller_blocklist.js';
+import { callDurationLimitMinutes, isPublicDemoCall, reservePublicDemoCall } from './lib/public_demo_limits.js';
+import { reservePublicDemoSession } from './lib/public_demo_session.js';
+import { createExtractionObserver } from './lib/extraction_observer.js';
 import { classifyCallerLine, type CallerLineInfo } from './lib/phone_classify.js';
 import {
   classifyPipelineErrorStage,
@@ -675,6 +679,36 @@ export default defineAgent({
       return;
     }
 
+    const publicDemoCall = isPublicDemoCall({ isDemoLine: testCall, isSipCall: participant.kind === ParticipantKind.SIP });
+    const demoAdmission = await reservePublicDemoCall({
+      organizationId: org.id, callerE164,
+      isDemoLine: testCall, isSipCall: participant.kind === ParticipantKind.SIP,
+    });
+    if (!demoAdmission.allowed) {
+      await rejectPublicDemoCaller({ ctx, participant, org, callerNumberRaw, callerE164, calledNumber }, demoAdmission.reason === 'unavailable' ? 'unavailable' : 'limited');
+      return;
+    }
+
+    const demoSession = await reservePublicDemoSession({
+      organizationId: org.id, roomName: ctx.room.name ?? '',
+      isDemoLine: testCall, isSipCall: participant.kind === ParticipantKind.SIP,
+    });
+    if (!demoSession.allowed) {
+      await rejectPublicDemoCaller({ ctx, participant, org, callerNumberRaw, callerE164, calledNumber }, demoSession.reason);
+      return;
+    }
+    const demoLease = demoSession.lease;
+    const demoLeaseTimer = demoLease ? setTimeout(() => {
+      void disconnectParticipant(ctx.room.name ?? '', participant.identity).catch(() => undefined);
+      // Stop local inference even if the remote hang-up request is unavailable.
+      ctx.shutdown('public_demo_lease_expired');
+    }, Math.max(1, demoLease.expiresAtMs - Date.now())) : undefined;
+    demoLeaseTimer?.unref();
+    if (demoLease) ctx.addShutdownCallback(async () => {
+      if (demoLeaseTimer) clearTimeout(demoLeaseTimer);
+      await demoLease?.release();
+    });
+
     const businessFiles = await getSendableBusinessFiles(org.id);
     const caraTools = new CaraTools();
     const routingLinks = CaraTools.parseLinks(org.routing_links);
@@ -871,6 +905,26 @@ export default defineAgent({
       roomMetadata: ctx.room.metadata ?? null,
     });
     const billableCall = !testCall && !engineerTestCall && !textRehearsalMode;
+    // Setup admission is checked on every real customer call, independent of
+    // cached organization config. Never start an AI session when it fails.
+    let setupMaxSeconds: number | null = null;
+    if (billableCall) {
+      try {
+        const { data: admission, error: admissionError } = await getSupabaseClient().rpc(
+          'claim_signup_setup_call', { p_org: org.id, p_call_key: callSidAttr || roomName },
+        );
+        if (admissionError || admission?.allowed !== true) throw new Error('Setup admission refused');
+        if (admission.restricted === true) {
+          if (!Number.isInteger(admission.max_seconds) || admission.max_seconds < 11 || admission.max_seconds > 300) throw new Error('Invalid setup allowance');
+          setupMaxSeconds = admission.max_seconds;
+        }
+      } catch {
+        console.warn('[agent] setup admission unavailable or refused', { orgId: org.id });
+        if (roomName && participant.identity) await disconnectParticipant(roomName, participant.identity).catch(() => undefined);
+        return;
+      }
+    }
+
     if (engineerTestCall) {
       console.info('[agent] engineer_test_call', {
         calledNumber: maskPhone(calledNumber),
@@ -891,7 +945,7 @@ export default defineAgent({
 
     const burstPctRaw = Number.parseFloat(process.env.CLISTE_QUOTA_BURST_PCT ?? '10');
     const burstFloor = Number.parseInt(process.env.CLISTE_QUOTA_BURST_FLOOR_MIN ?? '5', 10);
-    if (typeof planQuota === 'number' && planQuota > 0 && billableCall) {
+    if (typeof planQuota === 'number' && planQuota > 0 && billableCall && setupMaxSeconds == null) {
       const used = await sumUsageMinutesThisPeriod({
         organizationId: org.id,
         billingPeriodStart,
@@ -928,7 +982,7 @@ export default defineAgent({
       }
     }
 
-    const usageRecordIdPromise = billableCall
+    const usageRecordIdPromise = billableCall && setupMaxSeconds == null
       ? startUsageRecord({
           organizationId: org.id,
           planTier: org.plan_tier ?? null,
@@ -2003,6 +2057,7 @@ export default defineAgent({
       return true;
     };
 
+    const observeExtraction = createExtractionObserver();
     const ingestCallerFinalText = (
       text: string,
       bumpReason: string,
@@ -2013,6 +2068,15 @@ export default defineAgent({
       lastCallerUtterance = trimmed;
       const key = normalizeTranscriptKey(text);
       if (isDuplicateCallerUtterance(key, at)) return false;
+      for (const observation of observeExtraction(text)) {
+        diag.push('info', 'extraction_attempt_observed', observation);
+        reportPlatformEvent({
+          severity: observation.repeated ? 'warning' : 'info', category: 'worker',
+          eventType: 'extraction_attempt_observed',
+          message: observation.repeated ? 'Repeated requests for internal AI configuration were observed.' : 'A request for internal AI configuration was observed.',
+          organizationId: org.id, metadata: observation,
+        });
+      }
       settleGreetingPhase('caller_spoke');
       appendTranscriptLine(at, `Caller: ${text}`);
       session.userData.sessionFlags.likelySttGarble = false;
@@ -2877,9 +2941,7 @@ export default defineAgent({
       }
     });
 
-    const maxCallMinutesRaw = Number.parseInt(process.env.CLISTE_MAX_CALL_MINUTES ?? '30', 10);
-    const maxCallMinutes = Number.isFinite(maxCallMinutesRaw)
-      ? Math.min(Math.max(maxCallMinutesRaw, 1), 120) : 30;
+    const maxCallMinutes = callDurationLimitMinutes(publicDemoCall);
     const maxCallTimer = setTimeout(() => {
       console.warn('[agent] maximum call duration reached', { orgId: org.id, maxCallMinutes });
       if (roomName && participant.identity) {
@@ -2887,11 +2949,13 @@ export default defineAgent({
           console.error('[agent] max duration disconnect failed', error);
         });
       }
-    }, maxCallMinutes * 60_000);
+    }, Math.min(maxCallMinutes * 60_000, setupMaxSeconds == null ? Infinity : Math.max(1, setupMaxSeconds * 1000 - (Date.now() - callStartedAt))));
     maxCallTimer.unref();
 
     session.on(voice.AgentSessionEventTypes.Close, () => {
       clearTimeout(maxCallTimer);
+      if (demoLeaseTimer) clearTimeout(demoLeaseTimer);
+      void demoLease?.release();
       if (callLogWritten) return;
       clearAllGuardTimers();
 
@@ -2912,6 +2976,15 @@ export default defineAgent({
       let aiSummary: string | null = null;
       const postCallTracker = new PostCallProcessingTracker();
 
+      if (setupMaxSeconds != null) {
+        try {
+          const { error } = await getSupabaseClient().rpc('finish_signup_setup_call', {
+            p_org: org.id, p_call_key: callSidAttr || roomName,
+            p_seconds: Math.min(setupMaxSeconds, Math.ceil((Date.now() - callStartedAt) / 1000)),
+          });
+          if (error) console.warn('[agent] setup allowance settlement deferred', { orgId: org.id });
+        } catch { /* A failed settlement retains the full reservation. */ }
+      }
       try {
         const ud = udSnapshot;
         if (!ud?.organizationId) {
@@ -3226,6 +3299,7 @@ export default defineAgent({
             aiSummary,
             costEstimate,
             callResolution,
+            knowledgeGaps,
           });
           if (!enriched) {
             console.error('[agent] call log enrichment update failed', callLogId);
