@@ -405,6 +405,11 @@ async function storeRecordingBody(
 
   const patched = await updateCallLogAudioPath(callLogId, storagePath);
   if (!patched) {
+    const { error: cleanupError } = await getSupabaseClient().storage.from(CALL_RECORDINGS_BUCKET).remove([storagePath]);
+    if (cleanupError) {
+      const { error: queueError } = await getSupabaseClient().from('call_recording_cleanup').upsert({storage_path:storagePath,organization_id:storagePath.split('/')[0]},{onConflict:'storage_path',ignoreDuplicates:true});
+      if (queueError) console.error('[call_recording] CRITICAL orphan cleanup queue failed', { callLogId });
+    }
     console.warn('[call_recording] call_logs patch failed', { callLogId });
     reportRecordingBreak(
       'recording_call_log_patch_failed',

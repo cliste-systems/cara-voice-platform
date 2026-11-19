@@ -181,11 +181,13 @@ export function createGptLiveAudioCapture(): GptLiveAudioCapture | undefined {
             const sourcePcm = provider.pcm?.subarray(0, provider.samples * 2) ?? Buffer.alloc(0);
             const outputPcm = emitted.pcm?.subarray(0, emitted.samples * 2) ?? Buffer.alloc(0);
             // All filesystem work is asynchronous and happens once, after capture ends.
-            await Promise.all([
+            const writes = await Promise.allSettled([
               writeFile(files.sourcePath, wav(sourcePcm), { flag: 'wx', mode: 0o600 }),
               writeFile(files.outputPath, wav(outputPcm), { flag: 'wx', mode: 0o600 }),
               writeFile(files.metadataPath, JSON.stringify(metadata, null, 2), { flag: 'wx', mode: 0o600 }),
             ]);
+            const failure = writes.find(result => result.status === 'rejected');
+            if (failure) throw failure.reason;
             console.info('[gpt_live_audio_capture]', JSON.stringify(files));
           } catch (error) {
             console.warn('[gpt_live_audio_capture] local save failed', error instanceof Error ? error.message : String(error));

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { sumUsageMinutesThisPeriod } from './usage.js';
+import { planQuotaMinutes, sumUsageMinutesThisPeriod } from './usage.js';
 
 const organizationId = '00000000-0000-4000-8000-000000000001';
 const billingPeriodStart = '2026-09-01';
@@ -61,4 +61,8 @@ test('quota admission fails closed when the aggregate is unavailable or malforme
   for (const invalid of [null, [], {}, '0', -1]) {
     await withUsageResponse(invalid, (result) => assert.equal(result, null));
   }
+});
+
+test('included minutes match the published Starter, Growth, Business and Enterprise offers',()=>{
+ assert.deepEqual(['starter','pro','business','enterprise','unknown'].map(planQuotaMinutes),[150,400,800,2000,null]);
 });

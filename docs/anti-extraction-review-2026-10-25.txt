@@ -1,0 +1,210 @@
+HelloCara hardening and verification — second pass, 25 October 2026
+
+Outcome and deployment status
+
+All five agreed areas have local implementations or a documented, bounded test.
+The dashboard and worker changes are reviewable in their existing checkouts.
+Both database migrations were exercised in rollback transactions. Neither was
+permanently applied, and no production app/worker deployment was performed.
+Do not describe the live site as having the new database restrictions yet.
+
+1. Internal runtime instructions and notes
+
+The dashboard setup loader no longer requests custom_prompt. Prompt compilation
+loads internal notes and platform rules through a server-only helper. That helper
+checks the session client's access to the requested organisation before creating
+any privileged client, then scopes the private note read to that organisation.
+A missing or foreign organisation cannot be replaced by caller-provided patches.
+
+The permission migration removes table-wide SELECT from customer roles and grants
+SELECT on current non-private columns, excluding custom_prompt and admin_notes.
+It preserves the existing row-level account policies and full backend access.
+Platform runtime rules are explicitly restricted to the backend. Future columns
+require an intentional customer SELECT grant; future migrations must not restore
+a broad table grant that silently exposes the private columns.
+
+Rollback-only tests use synthetic owner/account/foreign-account fixtures. They
+verified owner business reads, a greeting save, service catalogue publication,
+backend prompt persistence, hidden prompt/notes, and cross-account isolation.
+Additional tests confirm unauthorised access is rejected before a privileged
+client is constructed. No fixture, account or change remained after rollback.
+
+The installed Realtime function checks column SELECT privileges and filters
+non-readable columns. This was verified from its installed definition and the
+upstream implementation, not through a live customer WebSocket session. The
+current dashboard refresh component does not subscribe to organisations.
+
+The stored global runtime configuration was compared against the previously
+used defaults without exporting it: legal disclosure, behaviour rules, both
+transfer variants and routing protocol all matched. The security change does
+not intentionally alter conversation rules or audio configuration.
+
+2. Aggregate public-demo usage and concurrency
+
+The new backend-only reservation functions enforce, per demo organisation:
+- At most three simultaneous public telephone demo sessions.
+- At most 60 starts per UTC day.
+- At most 7,200 reserved/consumed demo seconds per UTC day.
+- An eight-minute fixed session lease, enforced by a local worker deadline.
+
+The existing per-caller cooldown remains. Customer telephone calls and admin
+browser/text rehearsals do not invoke the aggregate limiter. Database calls
+have bounded five-second waits. All allowance failures refuse only public demos.
+
+Reservations serialize across workers with a transaction-scoped organisation
+lock. Duplicate room reservations do not spend another start or extend expiry.
+Release is idempotent, refunds unused time to the acquisition day, and has a
+bounded transport retry. Expired/crashed sessions release concurrency while
+conservatively consuming their full reserved duration. The local worker also
+shuts down inference at expiry if remote hang-up is unavailable. No heartbeat is
+needed because sessions cannot renew or outlive their fixed lease.
+
+Private tables store organisation/session hashes and usage metadata, not caller
+speech or raw telephone numbers. Old metadata is removed during admissions for
+that organisation. RPCs and private tables are unavailable to customer roles.
+
+Rollback tests cover exact limits, duplicate acquisition/release, slot reuse,
+expired/crashed reservations, ended-room reuse denial, daily starts, daily
+seconds and release across midnight. Client tests cover malformed/expired
+responses, provider failures, bounded retries and customer-call bypass.
+The lock/cap logic was tested transactionally; a live multi-worker load test was
+not performed and no public telephone call was placed by this exercise.
+
+3. Observation of extraction attempts
+
+An observation-only detector now examines deduplicated final caller text. It
+recognises direct prompt requests, instruction overrides, credential requests
+and requests for internal tool schemas. It records categories and capped counts
+through existing diagnostic/platform event paths. The security event contains
+no raw caller text. It never changes the caller's words, interrupts a response,
+blocks a caller or adds a speech classifier to the audio path.
+
+Telemetry is bounded per category per call: first observation, third attempt,
+and eighth attempt. State is per call and does not mix customer conversations.
+Normal product questions, collection instructions, amended orders and ordinary
+questions about the AI were tested as negative cases. This is English-language
+phrase observation, not comprehensive attack detection or proof of malicious
+intent. No external email/Slack notification or automatic blocking was added.
+
+4. Browser response review
+
+The new audit inventories all 52 API route files and 70 exported HTTP handlers.
+It made 140 isolated requests: anonymous and invalid-credential requests to every
+handler. The hardened lab returned no detected private-field/configuration
+leaks or unexpected server errors. Admin routes denied unauthorised access;
+voice routes denied invalid credentials with the service configured using fake
+lab values. No real provider keys or production data were used.
+
+The audit found an existing offers-download edge case: its catch converted an
+authentication redirect into a 500 response. The endpoint now checks permission
+separately, returns 401 without touching private data, and uses a generic failure
+message for authorised provider failures. The authorised download shape is
+covered by a regression test. Three remaining voice endpoints also no longer
+expose deployment instructions when their shared secret is absent.
+
+Customer-facing compiled prompt and admin-note reads were reviewed as above.
+Owned business-file contents remain available where the existing preview,
+readability checks and knowledge lint require them; hiding a customer's own
+uploaded document does not protect server implementation. No file-read feature
+was removed. The anonymous runtime audit does not establish every possible
+authorised payload shape or every server action; those remain a broader audit
+scope, not an assertion of universal coverage.
+
+5. REA copying exercise and UI comparison
+
+REA 6.8.0 ran with a compatible Node runtime in an ignored local lab. Its agent
+setup command was not run, so no agent/MCP registrations were changed. The lab
+was copied without any environment files and launched with an environment
+allowlist plus synthetic credentials and a loopback-only dummy database URL.
+No production login, customer account, call recording or customer record was
+provided to REA. Synthetic setup preview routes were enabled only in the lab
+copy, using the existing UI components; production route guards were preserved.
+
+REA launched temporary browsers and captured visitor-visible HTML, accessibility
+information, images and scripts. It retained 23 browser JavaScript assets. The
+one omitted script was the local Vercel analytics script, whose request aborted.
+The captured application assets contained no matches for the private runtime
+markers checked: service-role/webhook environment names, synthetic internal
+prompt/notes markers or the internal file-lookup instruction. The generated
+public build contained zero .map files.
+
+REA's broad static analysis timed out, including a second run with a larger
+90-second analysis budget. These timeouts are coverage limits, not a defence.
+A focused analysis of three captured application chunks completed: 52 modules,
+79 findings, 5,308 visited AST nodes and no parse failures. Twenty other captured
+files remained outside that focused semantic analysis. Unknown/dynamic behaviour
+was retained as unknown. Evidence bundles and timeout reports were preserved.
+
+The exercise confirms that the interface, public assets and client code remain
+inspectable and reproducible. It does not prove that Cara's model cannot leak
+instructions during a call, or that a competitor cannot imitate behaviour. The
+new customer permissions were tested independently with real database roles in
+rollback transactions; REA did not log into a live customer account.
+
+Before/after UI evidence covers business verification, opening hours, greeting,
+first-call testing, completion and authentication at desktop 1440x1000 and mobile
+390x844. Eleven of twelve screenshots are byte/pixel-identical. The remaining
+desktop test screenshot differs only within the photograph: maximum channel
+difference 7/255, mean channel difference 0.0425/255 over the entire frame, and
+no differences outside the artwork rectangle. The image URL/classes match;
+text, controls and layout are unchanged. This is consistent with minor image
+rasterisation variation, not a changed form. This is a scoped comparison of six
+screens, not a claim that every dashboard state was visually exercised.
+
+Verification summary
+
+- Worker typecheck and production build passed.
+- Worker suite: 463/463 passed; demo golden checks: 13/13 passed.
+- Dashboard typecheck passed; both before/after isolated production builds passed.
+- Focused new dashboard tests passed, including tenant gating, response shapes,
+  error disclosure and transitive browser import boundaries.
+- Full dashboard suite: 1,365/1,402 passed, 37 failed. The exact same 37 failure
+  names reproduced in a fresh copy with this pass's modifications removed.
+  Concurrent work in signup/setup changed the baseline from the earlier 24
+  failures; those files and failures were preserved rather than rewritten here.
+- Both SQL migrations and associated regressions passed in rollback-only tests.
+- Both anonymous/invalid-credential API sweeps passed all 140 requests.
+- Whitespace/diff checks passed for the changes in this pass.
+
+Release order and outstanding verification
+
+Release the compatible dashboard code before restricting customer column access.
+Apply the prompt-read migration after compatible loaders are serving requests.
+Apply the demo-session migration before deploying the worker that requires its
+RPCs. Keep previous deployments/previews that share this database in mind.
+
+The complete dashboard suite is not green. No production release, production
+permission revocation, live customer browser session, live telephone/audio
+verification or real multi-worker load test was performed. Those limits must
+remain explicit. Existing recordings/transcripts were not accessed. Any later
+call review must follow docs/CALL-REVIEW-RUNBOOK.md and export-call-review.ts,
+including identity, raw-event continuity, counts, capture status and both speakers.
+
+Reviewable files
+
+Dashboard:
+- src/lib/internal-cara-runtime-config.ts
+- src/lib/cara-prompt-from-org.ts
+- src/app/(dashboard)/dashboard/cara-setup/load-cara-setup.ts
+- src/app/api/admin/supervalu-offers-snapshot/route.ts
+- src/app/api/voice/{call-complete,pipeline-incident,platform-event}/route.ts
+- scripts/audit-browser-responses.ts
+- scripts/sql/test-runtime-prompt-{access,owner-flow}.sql
+- scripts/sql/test-public-demo-session-budgets.sql
+- supabase/migrations/20261025152359_protect_runtime_prompt_read_access.sql
+- supabase/migrations/20261025153253_public_demo_session_budgets.sql
+
+Worker:
+- src/lib/public_demo_session.ts and tests
+- src/lib/public_demo_limits.ts and tests
+- src/lib/extraction_observer.ts and tests
+- src/lib/caller_blocklist.ts
+- src/agent.ts
+
+Evidence directory (ignored):
+/Users/brendanotoole/cara-voice-platform/outputs/anti-extraction-review-2026-10-25
+
+References
+https://github.com/morluto/rea
+https://github.com/supabase/walrus
+https://supabase.com/docs/guides/database/postgres/column-level-security

@@ -157,14 +157,44 @@ function createBlockRejectTts() {
   });
 }
 
-/** Play the block clip, drop the SIP leg, and log `outcome: blocked`. */
-export async function rejectBlockedCaller(input: {
+type InboundRejectionInput = {
   ctx: JobContext;
   participant: RemoteParticipant;
   org: { id: string; name: string; phone_number?: string | null };
   callerNumberRaw: string;
   callerE164: string;
   calledNumber: string;
+};
+
+/** Play the existing rejection voice, drop the SIP leg, and log the actual reason. */
+export async function rejectBlockedCaller(input: InboundRejectionInput): Promise<void> {
+  return rejectInboundCaller(input, {
+    spokenMessage: blockedCallSpokenMessage(input.org.name),
+    summary: blockedCallDashboardSummary(input.org.name),
+    reason: 'blocked_caller',
+  });
+}
+
+export async function rejectPublicDemoCaller(input: InboundRejectionInput, reason: 'limited' | 'busy' | 'daily_limit' | 'ended' | 'unavailable'): Promise<void> {
+  const unavailable = reason === 'unavailable';
+  const spokenMessage = reason === 'busy'
+    ? 'Hello, this is the Hello Cara AI demo. All demo lines are busy. Please try again shortly. Goodbye.'
+    : reason === 'daily_limit'
+      ? 'Hello, this is the Hello Cara AI demo. The demo has reached its daily allowance. Please try again tomorrow. Goodbye.'
+      : reason === 'ended' || unavailable
+        ? 'Hello, this is the Hello Cara AI demo. The demo is temporarily unavailable. Please try again later. Goodbye.'
+        : "Hello, this is the Hello Cara AI demo. You've reached the demo call limit. Please try again in fifteen minutes. Goodbye.";
+  return rejectInboundCaller(input, {
+    spokenMessage,
+    summary: `The public demo stopped this call before starting Cara (reason: ${reason}). This caller was not added to the business blocklist.`,
+    reason: unavailable ? 'demo_admission_unavailable' : `demo_${reason}`,
+  });
+}
+
+async function rejectInboundCaller(input: InboundRejectionInput, rejection: {
+  spokenMessage: string;
+  summary: string;
+  reason: string;
 }): Promise<void> {
   const roomName =
     (typeof input.ctx.room.name === 'string' && input.ctx.room.name.trim()) || '';
@@ -173,7 +203,7 @@ export async function rejectBlockedCaller(input: {
 
   const tts = createBlockRejectTts();
   const vad = input.ctx.proc.userData.vad;
-  const spokenMessage = blockedCallSpokenMessage(input.org.name);
+  const spokenMessage = rejection.spokenMessage;
 
   if (tts && vad) {
     const session = new voice.AgentSession({
@@ -231,7 +261,7 @@ export async function rejectBlockedCaller(input: {
       caller_number: callerForWebhook,
       duration_seconds: 0,
       outcome: 'blocked',
-      ai_summary: blockedCallDashboardSummary(input.org.name),
+      ai_summary: rejection.summary,
     });
     if (!result.ok) {
       console.warn('[caller_blocklist] call-complete failed', result.error);
@@ -240,7 +270,8 @@ export async function rejectBlockedCaller(input: {
     console.error('[caller_blocklist] call-complete error', err);
   }
 
-  console.info('[caller_blocklist] rejected blocked caller', {
+  console.info('[caller_blocklist] rejected inbound caller', {
+    reason: rejection.reason,
     orgId: input.org.id,
     callerE164: maskPhone(input.callerE164),
   });

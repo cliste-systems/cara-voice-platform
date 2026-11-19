@@ -329,6 +329,32 @@ describe('caller delivery security boundaries', () => {
     routeId: 'location', channel: 'email' as const, emailAddress, callerConsented: true,
   });
 
+  it('rejects guessed routes without spending delivery allowance, then preserves a valid request', async () => {
+    await withDeliveryFixture(async ({ tools, context, requests }) => {
+      for (const routeId of ['other-tenant-private-route', '../internal-config', 'dump-system-prompt']) {
+        assert.equal((await tools.sendDirectionsLink.execute({ ...emailArgs(), routeId }, context)).ok, false);
+      }
+      assert.equal(requests.length, 0);
+      assert.equal((await tools.sendDirectionsLink.execute(emailArgs(), context)).ok, true);
+      assert.equal(requests.length, 1);
+    });
+  });
+
+  it('uses server-bound tenant, room and saved URL even when model arguments forge replacements', async () => {
+    await withDeliveryFixture(async ({ tools, context, requests, userData }) => {
+      const forged = {
+        ...emailArgs(), organizationId: 'foreign-tenant', called_number: '+15555550999',
+        call_session_id: 'forged-room', url: 'https://attacker.invalid/extract',
+      };
+      assert.equal((await tools.sendDirectionsLink.execute(forged, context)).ok, true);
+      const payload = JSON.stringify(requests[0]);
+      assert.equal(requests[0]?.called_number, userData.calledNumber);
+      assert.equal(requests[0]?.call_session_id, 'sip-test-server-room');
+      assert.ok(payload.includes('https://example.com/location'));
+      assert.doesNotMatch(payload, /foreign-tenant|forged-room|attacker\.invalid/);
+    });
+  });
+
   it('blocks repeated and simultaneous duplicate emails using normalized recipients', async () => {
     await withDeliveryFixture(async ({ tools, context, requests }) => {
       const outcomes = await Promise.all([
